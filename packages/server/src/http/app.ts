@@ -1,5 +1,7 @@
 import express, { type Express } from 'express';
-import { appConfig } from '../core/config.js';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { appConfig, REPO_ROOT } from '../core/config.js';
 import { initDatabase } from '../db/index.js';
 import { loadProviders } from '../core/registry.js';
 import {
@@ -58,6 +60,23 @@ export async function createApp(): Promise<Express> {
   api.use(metricsRouter);
   api.use(labsRouter);
   app.use('/api', api);
+
+  // Optionally serve the built SPA from the same origin. This is what makes
+  // `docker compose up` a single service; in development Vite serves it instead
+  // and proxies /api here. Mounted AFTER the API router so it can never shadow it.
+  const webDist = process.env.SERVE_WEB_DIR
+    ? resolve(process.env.SERVE_WEB_DIR)
+    : join(REPO_ROOT, 'packages', 'web', 'dist');
+
+  if (existsSync(join(webDist, 'index.html'))) {
+    app.use(express.static(webDist, { index: false, maxAge: '1h', etag: true }));
+    // SPA fallback for GET only: a POST to an unknown path must still 404 rather
+    // than returning an HTML page a client will try to parse as JSON.
+    app.get(/^(?!\/api|\/health).*/, (_req, res) => {
+      res.sendFile(join(webDist, 'index.html'));
+    });
+    logger.info('http.serving_web', { dir: webDist });
+  }
 
   app.use(notFound);
   app.use(errorHandler);

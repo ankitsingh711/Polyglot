@@ -109,18 +109,27 @@ setInterval(() => {
 // Security headers
 // ---------------------------------------------------------------------------
 
-export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
-  // This process serves JSON and SSE only; the SPA is served by Vite in dev and
-  // by a static host in production, so the policy can be maximally restrictive.
+export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('cross-origin-resource-policy', 'same-site');
-  res.setHeader('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
   res.removeHeader('x-powered-by');
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
   }
+
+  // The API answers only JSON and SSE, so its policy can forbid everything.
+  // The optionally-served SPA needs its own bundle, styles and data: URIs for
+  // uploaded-image previews -- but still no remote origins, and no inline script.
+  res.setHeader(
+    'content-security-policy',
+    req.path.startsWith('/api') || req.path === '/health'
+      ? "default-src 'none'; frame-ancestors 'none'"
+      : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; " +
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  );
   next();
 }
 
