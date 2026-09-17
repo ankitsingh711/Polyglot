@@ -43,14 +43,25 @@ export function openSse(req: Request, res: Response): SseChannel {
     if (!controller.signal.aborted) controller.abort(new DOMException(reason, 'AbortError'));
   };
 
-  // The client went away: abort the upstream provider call immediately.
-  req.on('close', () => {
-    if (!res.writableEnded) {
+  /*
+   * The client went away: abort the upstream provider call immediately.
+   *
+   * This listens on the RESPONSE, not the request. `req.on('close')` looks like
+   * the obvious choice and is wrong: for a POST whose body has been fully read,
+   * Node emits 'close' on the IncomingMessage as soon as the body ends, which is
+   * microseconds after the handler starts. Listening there aborts every stream
+   * before it produces a single token.
+   *
+   * `res.on('close')` fires when the socket actually closes. Guarding on
+   * `writableFinished` distinguishes "the client hung up" from "we finished
+   * normally and called end()".
+   */
+  res.on('close', () => {
+    if (!res.writableFinished) {
       logger.info('sse.client_disconnected', { path: req.path });
       finish('client disconnected');
     }
   });
-  req.on('aborted', () => finish('request aborted'));
 
   // Proxies and load balancers drop idle connections; a comment every 15s keeps
   // the stream alive during a long first token without emitting a real event.
