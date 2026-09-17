@@ -11,3 +11,6 @@ coverage/
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+
+# TypeScript incremental build state
+*.tsbuildinfo
