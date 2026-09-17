@@ -233,6 +233,14 @@ export interface ModelEntry {
   maxOutputTokens?: number;
   /** Embedding models only. */
   dimensions?: number;
+  /**
+   * Embedding models only. A cosine score means nothing in the absolute: a
+   * relevant query/passage pair scores around 0.35 on text-embedding-3-small,
+   * around 0.7 on gemini-embedding-001, and around 0.05 on the local hashed
+   * embedder. The retrieval threshold therefore belongs to the MODEL, with
+   * app.json's value as the fallback for models that do not declare one.
+   */
+  retrieval?: { defaultSimilarityThreshold: number };
   capabilities: ModelCapabilities;
   pricing: ModelPricing;
   displayName?: string;

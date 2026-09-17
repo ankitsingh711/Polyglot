@@ -58,6 +58,11 @@ const pricingSchema = z.object({
   reasoningPerMTok: z.number().min(0).optional(),
 });
 
+const retrievalDefaultsSchema = z.object({
+  /** Cosine scores are only comparable within one embedding model. */
+  defaultSimilarityThreshold: z.number().min(0).max(1),
+});
+
 const modelEntrySchema = z.object({
   displayName: z.string().optional(),
   provider: z.string().min(1),
@@ -66,6 +71,7 @@ const modelEntrySchema = z.object({
   contextWindow: z.number().int().positive(),
   maxOutputTokens: z.number().int().positive().optional(),
   dimensions: z.number().int().positive().optional(),
+  retrieval: retrievalDefaultsSchema.optional(),
   capabilities: capabilitiesSchema,
   pricing: pricingSchema,
 });

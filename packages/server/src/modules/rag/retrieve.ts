@@ -1,4 +1,5 @@
 import { appConfig } from '../../core/config.js';
+import { getModelEntry } from '../../core/registry.js';
 import { embed } from './embeddings.js';
 import {
   getChunks,
@@ -28,6 +29,15 @@ import { logger } from '../../util/logger.js';
  * what makes "I do not know" possible: if nothing clears the threshold there is
  * nothing to ground an answer in, and we say so rather than letting the model
  * improvise from whatever ranked highest among bad options.
+ *
+ * That threshold is per EMBEDDING MODEL, not global. A cosine score has no
+ * absolute meaning across models: a relevant pair scores around 0.35 on
+ * text-embedding-3-small, around 0.7 on gemini-embedding-001, and around 0.05 on
+ * the local hashed embedder. Shipping one number for all three would silently
+ * make retrieval either useless or ungrounded depending on which one you picked.
+ * The model's own default comes from config/models.json; app.json is the
+ * fallback; and the UI can override it per request, which is what the brief
+ * means by runtime-configurable.
  */
 
 export interface RetrievalParams {
@@ -38,11 +48,19 @@ export interface RetrievalParams {
   maxContextChars: number;
 }
 
-export function defaultRetrievalParams(): RetrievalParams {
+export function defaultRetrievalParams(embeddingModel?: string): RetrievalParams {
   const rag = appConfig().rag;
+  let similarityThreshold = rag.similarityThreshold;
+  if (embeddingModel) {
+    try {
+      similarityThreshold = getModelEntry(embeddingModel).retrieval?.defaultSimilarityThreshold ?? similarityThreshold;
+    } catch {
+      /* unknown model: fall back to the global default */
+    }
+  }
   return {
     topK: rag.topK,
-    similarityThreshold: rag.similarityThreshold,
+    similarityThreshold,
     retrievalMode: rag.retrievalMode,
     rrfK: rag.rrfK,
     maxContextChars: rag.maxContextChars,
@@ -95,7 +113,7 @@ export async function retrieve(
   opts: { signal?: AbortSignal; conversationId?: string | null } = {},
 ): Promise<RetrievalResult> {
   const collection = requireCollection(collectionId);
-  const params = { ...defaultRetrievalParams(), ...stripUndefined(overrides) };
+  const params = { ...defaultRetrievalParams(collection.embedding_model), ...stripUndefined(overrides) };
   const trimmed = query.trim();
 
   if (!trimmed) {
