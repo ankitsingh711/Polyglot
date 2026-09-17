@@ -7,10 +7,18 @@ boundary that the database itself enforces.
 
 ```
 packages/server   Node + TypeScript + Express 5 + SQLite (better-sqlite3)
-packages/web      React 19 + Vite
+packages/web      React 19 + Vite — light theme, self-hosted Inter/JetBrains Mono
 config/           models, pricing, providers, retry, fallback, RAG defaults
 docs/             DESIGN.md · PROVIDER_NOTES.md · AI_USAGE.md
 ```
+
+The interface is built around the thing this product is for: a header carrying
+live provider health, a context column, the work, a details panel, and a
+**permanent telemetry bar** along the bottom showing spend today, request count,
+average latency and TTFT. Cost and provenance are not buried in a tab you have to
+remember to open. Each provider has a fixed colour that identifies it everywhere
+it appears — header dot, the left edge of its messages, its comparison lane, its
+metrics row — so a dense table is scannable without reading a label.
 
 ---
 
@@ -59,6 +67,10 @@ Reviewers running with their own keys need only `ANTHROPIC_API_KEY` and
    not merely filtered out — the query cannot reach it.
 6. **Metrics tab**: TTFT, latency, tokens (including cached), USD per request,
    retries, fallbacks, and the audit trail.
+
+Everything above was exercised in a real browser against a mock upstream while
+building it, including the tool loop, citations, cancellation and the responsive
+layout down to 560px.
 
 ---
 

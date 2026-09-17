@@ -127,7 +127,10 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     req.path.startsWith('/api') || req.path === '/health'
       ? "default-src 'none'; frame-ancestors 'none'"
       : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-        "img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; " +
+        // `data:` is required for fonts: the self-hosted variable-font CSS
+        // inlines its smallest subsets as data URIs, and without this the page
+        // silently falls back to a system font.
+        "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; " +
         "object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
   );
   next();

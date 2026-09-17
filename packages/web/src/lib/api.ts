@@ -114,11 +114,18 @@ export async function streamSse(
   }
 }
 
+/**
+ * Money, at the precision the magnitude deserves.
+ *
+ * A single chat turn can cost $0.000214 and a daily budget is $25.00; printing
+ * both to four decimals makes one unreadable and the other look broken.
+ */
 export function formatUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
-  if (value === 0) return '$0';
+  if (value === 0) return '$0.00';
   if (value < 0.01) return `$${value.toFixed(6)}`;
-  return `$${value.toFixed(4)}`;
+  if (value < 1) return `$${value.toFixed(4)}`;
+  return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatMs(value: number | null | undefined): string {

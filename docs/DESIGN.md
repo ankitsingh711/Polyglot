@@ -539,7 +539,18 @@ caps only. Every billed number comes from the provider's own `usage`.
 Rejected: four vendor tokenizers, three of which are network calls on the hot
 path. `context.headroomRatio` is the margin that absorbs the error.
 
-**12. SSE over WebSockets.**
+**12. Light theme only, with self-hosted variable fonts.**
+Chose: one carefully built light theme (warm neutral ramp, single saturated
+accent, per-provider hues), with Inter and JetBrains Mono bundled by Vite and
+served from our own origin.
+Rejected: a theme toggle, which doubles the surface every colour decision has to
+be checked against for a workbench whose dense numeric tables want maximum
+contrast; and Google Fonts, which would have forced the Content-Security-Policy
+open to a font CDN. Self-hosting keeps `font-src 'self' data:`.
+Cost: no dark mode. It is the first thing I would add, and the token file is
+structured so it is a second `:root` block rather than a rewrite.
+
+**13. SSE over WebSockets.**
 Chose: one-way text, survives proxies, reuses the HTTP auth we already have.
 POST + `fetch` rather than `EventSource`, because `EventSource` cannot set headers
 and would force the tenant key into the query string — and therefore into access

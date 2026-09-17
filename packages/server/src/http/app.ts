@@ -1,6 +1,7 @@
 import express, { type Express } from 'express';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { appConfig, REPO_ROOT } from '../core/config.js';
 import { initDatabase } from '../db/index.js';
 import { loadProviders } from '../core/registry.js';
@@ -61,14 +62,27 @@ export async function createApp(): Promise<Express> {
   api.use(labsRouter);
   app.use('/api', api);
 
-  // Optionally serve the built SPA from the same origin. This is what makes
-  // `docker compose up` a single service; in development Vite serves it instead
-  // and proxies /api here. Mounted AFTER the API router so it can never shadow it.
-  const webDist = process.env.SERVE_WEB_DIR
-    ? resolve(process.env.SERVE_WEB_DIR)
-    : join(REPO_ROOT, 'packages', 'web', 'dist');
+  /*
+   * Optionally serve the built SPA from the same origin. This is what makes
+   * `docker compose up` a single service; in development Vite serves it and
+   * proxies /api here. Mounted AFTER the API router so it can never shadow it.
+   *
+   * The candidates are tried in order rather than derived from REPO_ROOT alone:
+   * REPO_ROOT follows POLYGLOT_CONFIG_DIR, so pointing the config elsewhere used
+   * to silently stop the UI being served. Anchoring on this module's own
+   * location is what actually holds.
+   */
+  const here = dirname(fileURLToPath(import.meta.url));
+  const webDist = [
+    process.env.SERVE_WEB_DIR && resolve(process.env.SERVE_WEB_DIR),
+    join(here, '..', '..', '..', 'web', 'dist'), // dist/http → packages/web/dist
+    join(here, '..', '..', 'web', 'dist'), // src/http  → packages/web/dist
+    join(REPO_ROOT, 'packages', 'web', 'dist'),
+  ]
+    .filter((p): p is string => Boolean(p))
+    .find((p) => existsSync(join(p, 'index.html')));
 
-  if (existsSync(join(webDist, 'index.html'))) {
+  if (webDist) {
     app.use(express.static(webDist, { index: false, maxAge: '1h', etag: true }));
     // SPA fallback for GET only: a POST to an unknown path must still 404 rather
     // than returning an HTML page a client will try to parse as JSON.

@@ -63,6 +63,8 @@ export interface Citation {
 export interface ContentBlock {
   type: 'text' | 'image' | 'tool_use' | 'tool_result';
   text?: string;
+  /** tool_use: the provider-agnostic call id the tool_result refers back to. */
+  id?: string;
   name?: string;
   input?: Record<string, unknown>;
   toolUseId?: string;
