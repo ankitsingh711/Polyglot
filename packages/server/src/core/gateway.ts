@@ -1,5 +1,5 @@
 import { appConfig } from './config.js';
-import { AppError, ProviderError, isProviderError } from './errors.js';
+import { AppError, ProviderError, isProviderError, scrubSecrets } from './errors.js';
 import { computeCost, estimateMaxCost } from './pricing.js';
 import { getModelEntry, isProviderConfigured, providerForModel } from './registry.js';
 import { computeBackoff, defaultRetryPolicy, shouldRetry, type RetryPolicy } from './retry.js';
@@ -238,7 +238,7 @@ export async function* streamCompletion(
           const delayMs = computeBackoff(attempt, policy, perr.retryAfterMs);
           retryCount++;
           logger.warn('gateway.retry', { modelId, attempt, delayMs, kind: perr.kind });
-          yield { type: 'retry', attempt, delayMs, kind: perr.kind, provider: entry.provider, message: perr.message };
+          yield { type: 'retry', attempt, delayMs, kind: perr.kind, provider: entry.provider, message: scrubSecrets(perr.message) };
           try {
             await sleep(delayMs, req.signal);
           } catch {
@@ -250,7 +250,7 @@ export async function* streamCompletion(
         const nextModel = candidates[hop + 1];
         if (nextModel && shouldFallback(perr)) {
           logger.warn('gateway.fallback', { from: modelId, to: nextModel, kind: perr.kind });
-          yield { type: 'fallback', from: modelId, to: nextModel, kind: perr.kind, message: perr.message };
+          yield { type: 'fallback', from: modelId, to: nextModel, kind: perr.kind, message: scrubSecrets(perr.message) };
         }
         break; // exit attempt loop → next candidate (or out of candidates)
       }

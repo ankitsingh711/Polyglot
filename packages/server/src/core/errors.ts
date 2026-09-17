@@ -21,6 +21,42 @@ export function isRetryableKind(kind: ErrorKind): boolean {
   return RETRYABLE.has(kind);
 }
 
+/**
+ * Provider error messages are vendor-authored strings, and vendors put secrets
+ * in them. Google's 403 body, for example, reads:
+ *
+ *   "Permission denied: Consumer 'api_key:AQ.Ab8R...' has been suspended."
+ *
+ * That message is the one thing about the error that is worth showing a user, so
+ * it is kept -- but it is scrubbed first. Dropping `raw` is not enough: `raw` was
+ * never the leak, the human-readable message was.
+ *
+ * Two passes, because neither alone is sufficient:
+ *  1. known key SHAPES, which catch a key this process does not itself hold
+ *     (a proxy's key, a key echoed from a forwarded request);
+ *  2. the literal values of every configured key, which catches shapes we have
+ *     not seen before -- including new vendor formats.
+ */
+const KEY_SHAPES =
+  /\b(sk-ant-[A-Za-z0-9_\-]{12,}|sk-[A-Za-z0-9_\-]{12,}|AIza[A-Za-z0-9_\-]{20,}|AQ\.[A-Za-z0-9_\-]{16,}|gsk_[A-Za-z0-9]{20,}|xai-[A-Za-z0-9]{20,})\b/g;
+/** `api_key:<anything>` / `key=<anything>`, whatever shape the token has. */
+const KEY_LABELLED = /((?:api[-_]?key|key|token|authorization)\s*[:=]\s*)('?)([A-Za-z0-9._\-]{8,})\2/gi;
+
+/** Env vars that hold a provider credential. Read lazily: .env loads after this module. */
+function configuredSecrets(): string[] {
+  return Object.entries(process.env)
+    .filter(([k, v]) => /(_API_KEY|_TOKEN|_SECRET)$/.test(k) && typeof v === 'string' && v.length >= 8)
+    .map(([, v]) => v as string);
+}
+
+export function scrubSecrets(text: string): string {
+  let out = text.replace(KEY_SHAPES, '[redacted-key]').replace(KEY_LABELLED, '$1[redacted-key]');
+  for (const secret of configuredSecrets()) {
+    if (secret && out.includes(secret)) out = out.split(secret).join('[redacted-key]');
+  }
+  return out;
+}
+
 export class ProviderError extends Error implements NormalizedProviderError {
   readonly kind: ErrorKind;
   readonly provider: string;
@@ -58,7 +94,7 @@ export class ProviderError extends Error implements NormalizedProviderError {
     return {
       kind: this.kind,
       provider: this.provider,
-      message: this.message,
+      message: scrubSecrets(this.message),
       retryable: this.retryable,
     };
   }

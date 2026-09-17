@@ -284,3 +284,68 @@ describe('configuration and registry', () => {
     expect(listModels('embedding').every((m) => m.dimensions && m.dimensions > 0)).toBe(true);
   });
 });
+
+describe('secret scrubbing on the client boundary', () => {
+  // Regression: Google's 403 body embeds the whole API key in the human-readable
+  // message ("Consumer 'api_key:AQ.Ab8R...' has been suspended"), and that
+  // message was forwarded to the browser verbatim. Dropping `raw` never helped,
+  // because `raw` was not the leak.
+  it('redacts a Google-style key echoed in a provider message', () => {
+    const err = new ProviderError({
+      kind: 'auth',
+      provider: 'google',
+      message:
+        "google: Permission denied: Consumer 'api_key:AQ.Ab8RN6IDGtIWq4WVNYFGtN_XUaPhpQ0zbYZ' has been suspended.",
+      raw: { secret: 'should never be serialized' },
+    });
+    const wire = err.toClient();
+    expect(wire.message).not.toContain('AQ.Ab8RN6IDGtIWq4WVNYFGtN');
+    expect(wire.message).toContain('[redacted-key]');
+    expect(wire).not.toHaveProperty('raw');
+    // The useful part of the message survives.
+    expect(wire.message).toContain('has been suspended');
+    expect(wire.kind).toBe('auth');
+  });
+
+  it('redacts the other vendors\' key shapes', () => {
+    for (const key of [
+      'sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345',
+      'sk-proj-abcdefghijklmnopqrstuvwxyz',
+      'AIzaSyA1bcdefghijklmnopqrstuvwxyz01234',
+      'gsk_abcdefghijklmnopqrstuvwxyz0123456789',
+    ]) {
+      const wire = new ProviderError({
+        kind: 'auth',
+        provider: 'x',
+        message: `x: invalid key ${key} supplied`,
+      }).toClient();
+      expect(wire.message, key).not.toContain(key);
+      expect(wire.message, key).toContain('[redacted-key]');
+    }
+  });
+
+  it('redacts a configured key even when its shape is unknown', () => {
+    const value = 'totally-novel-vendor-format-9f8e7d6c5b4a';
+    process.env.WEIRDVENDOR_API_KEY = value;
+    try {
+      const wire = new ProviderError({
+        kind: 'auth',
+        provider: 'weirdvendor',
+        message: `weirdvendor: the credential ${value} is not active`,
+      }).toClient();
+      expect(wire.message).not.toContain(value);
+      expect(wire.message).toContain('[redacted-key]');
+    } finally {
+      delete process.env.WEIRDVENDOR_API_KEY;
+    }
+  });
+
+  it('leaves an ordinary message untouched', () => {
+    const wire = new ProviderError({
+      kind: 'rate_limit',
+      provider: 'anthropic',
+      message: 'anthropic: rate limit exceeded, retry in 3s',
+    }).toClient();
+    expect(wire.message).toBe('anthropic: rate limit exceeded, retry in 3s');
+  });
+});

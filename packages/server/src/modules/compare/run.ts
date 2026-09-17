@@ -1,5 +1,5 @@
 import { appConfig } from '../../core/config.js';
-import { AppError, isProviderError } from '../../core/errors.js';
+import { AppError, isProviderError, scrubSecrets } from '../../core/errors.js';
 import { streamCompletion, type GatewayEvent } from '../../core/gateway.js';
 import { computeCost } from '../../core/pricing.js';
 import { getModelEntry, isProviderConfigured } from '../../core/registry.js';
@@ -117,7 +117,7 @@ async function* runLane(lane: string, modelId: string, input: CompareInput): Asy
         case 'error':
           yield {
             ...base,
-            event: { type: 'error', kind: event.error.kind, message: event.error.message },
+            event: { type: 'error', kind: event.error.kind, message: scrubSecrets(event.error.message) },
           };
           break;
         default:
@@ -130,7 +130,7 @@ async function* runLane(lane: string, modelId: string, input: CompareInput): Asy
       event: {
         type: 'error',
         kind: isProviderError(err) ? err.kind : 'server_error',
-        message: (err as Error).message,
+        message: scrubSecrets((err as Error).message),
       },
     };
   }

@@ -1,5 +1,5 @@
 import { appConfig } from '../../core/config.js';
-import { AppError, ProviderError, isProviderError } from '../../core/errors.js';
+import { AppError, ProviderError, isProviderError, scrubSecrets } from '../../core/errors.js';
 import { streamCompletion, type GatewayEvent } from '../../core/gateway.js';
 import { computeCost } from '../../core/pricing.js';
 import { getModelEntry, isProviderConfigured } from '../../core/registry.js';
@@ -384,7 +384,7 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
           yield {
             type: 'error',
             kind: err.kind,
-            message: err.message,
+            message: scrubSecrets(err.message),
             provider: err.provider,
             retryable: err.retryable,
           };
@@ -493,7 +493,7 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
           return {
             use,
             ok: false,
-            content: `The tool failed: ${(err as Error).message}`,
+            content: `The tool failed: ${scrubSecrets((err as Error).message)}`,
             durationMs: Math.round(performance.now() - started),
             meta: undefined,
           };

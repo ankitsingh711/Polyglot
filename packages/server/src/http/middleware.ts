@@ -238,3 +238,27 @@ export function pathParam(req: Request, name: string): string {
 export function notFound(_req: Request, res: Response): void {
   respondError(res, new AppError(404, 'not_found', 'No such endpoint.'));
 }
+
+/**
+ * An AbortSignal that fires when the CLIENT goes away, for non-SSE routes that
+ * do upstream work (ingest, search, structured extraction).
+ *
+ * This listens on the RESPONSE, not the request, for the same reason `openSse`
+ * does: for a POST whose body has been fully read — which is every JSON and
+ * every multipart route, because the body parser drains it before the handler
+ * runs — Node emits 'close' on the IncomingMessage as soon as the body ends,
+ * microseconds after the handler starts. `req.on('close', abort)` therefore
+ * aborts every request instantly, whether or not the client is still there.
+ *
+ * `res.on('close')` fires when the socket actually closes, and `writableFinished`
+ * separates "the client hung up" from "we answered and ended normally".
+ */
+export function abortOnClientDisconnect(res: Response): AbortSignal {
+  const controller = new AbortController();
+  res.on('close', () => {
+    if (!res.writableFinished && !controller.signal.aborted) {
+      controller.abort(new DOMException('client disconnected', 'AbortError'));
+    }
+  });
+  return controller.signal;
+}

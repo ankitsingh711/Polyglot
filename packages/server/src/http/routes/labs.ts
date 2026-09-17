@@ -5,7 +5,7 @@ import { runComparison, validateCompareModels } from '../../modules/compare/run.
 import { extractStructured } from '../../modules/structured/extract.js';
 import { getChunks } from '../../modules/rag/store.js';
 import { forTenant } from '../../db/index.js';
-import { asyncRoute, respondError } from '../middleware.js';
+import { abortOnClientDisconnect, asyncRoute, respondError } from '../middleware.js';
 import { openSse } from '../sse.js';
 
 /**
@@ -101,8 +101,7 @@ labsRouter.post(
       throw new AppError(400, 'missing_content', 'Provide either "content" or "documentId".');
     }
 
-    const controller = new AbortController();
-    req.on('close', () => controller.abort());
+    const signal = abortOnClientDisconnect(res);
 
     const content = body.content ?? documentText(body.documentId!);
     const result = await extractStructured({
@@ -112,7 +111,7 @@ labsRouter.post(
       instruction: body.instruction,
       content,
       maxTokens: body.maxTokens,
-      signal: controller.signal,
+      signal,
     });
 
     // 422 when the model could not satisfy the schema after its retry: the

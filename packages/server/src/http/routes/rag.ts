@@ -14,7 +14,7 @@ import {
   listDocuments,
   requireCollection,
 } from '../../modules/rag/store.js';
-import { asyncRoute, pathParam } from '../middleware.js';
+import { abortOnClientDisconnect, asyncRoute, pathParam } from '../middleware.js';
 
 export const ragRouter: Router = Router();
 
@@ -121,15 +121,14 @@ ragRouter.post(
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
     if (!files.length) throw new AppError(400, 'no_files', 'Attach at least one file in the "files" field.');
 
-    const controller = new AbortController();
-    req.on('close', () => controller.abort());
+    const signal = abortOnClientDisconnect(res);
 
     // Per-file results rather than all-or-nothing: one unreadable PDF in a batch
     // of ten should not discard the nine that ingested fine.
     const results = [];
     for (const file of files) {
       try {
-        const result = await ingestFile(collectionId, file, { signal: controller.signal });
+        const result = await ingestFile(collectionId, file, { signal });
         results.push({
           ok: true as const,
           filename: result.document.filename,
@@ -168,8 +167,7 @@ ragRouter.post(
   '/collections/:id/search',
   asyncRoute(async (req, res) => {
     const body = parse(searchSchema, req.body);
-    const controller = new AbortController();
-    req.on('close', () => controller.abort());
+    const signal = abortOnClientDisconnect(res);
 
     const result = await retrieve(
       pathParam(req, 'id'),
@@ -180,7 +178,7 @@ ragRouter.post(
         retrievalMode: body.retrievalMode,
         rrfK: body.rrfK,
       },
-      { signal: controller.signal },
+      { signal },
     );
     res.json(result);
   }),
