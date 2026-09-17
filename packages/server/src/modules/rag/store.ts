@@ -114,6 +114,24 @@ export function requireCollection(id: string): CollectionRow {
 export function deleteCollection(id: string): void {
   requireCollection(id);
   forTenant().transaction(() => {
+    /*
+     * Detach conversations FIRST, by hand.
+     *
+     * `conversations` references this row through a COMPOSITE foreign key,
+     * `(tenant_id, collection_id) -> collections(tenant_id, id)`, declared
+     * `ON DELETE SET NULL`. SQLite applies SET NULL to every column of the key,
+     * not just the one that names the parent — so deleting a collection nulls
+     * `tenant_id` too, and `tenant_id` is NOT NULL. The delete then fails with
+     * "NOT NULL constraint failed: conversations.tenant_id", which is a 500 on
+     * the ordinary path of deleting a collection some conversation is using.
+     *
+     * The composite key is what makes a cross-tenant reference unrepresentable,
+     * so the key stays and the detach moves here: once no row references the
+     * collection, the FK's SET NULL has nothing to act on.
+     */
+    forTenant()
+      .prepare('UPDATE conversations SET collection_id = NULL WHERE tenant_id = :tenant_id AND collection_id = :id')
+      .run({ id });
     // chunks_fts is not covered by ON DELETE CASCADE (it is a virtual table).
     forTenant()
       .prepare('DELETE FROM chunks_fts WHERE tenant_id = :tenant_id AND collection_id = :id')

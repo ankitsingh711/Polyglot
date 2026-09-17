@@ -2,11 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chunkText, tailOverlap } from '../src/modules/rag/chunk.js';
 import { normalizeText, sanitizeFilename, resolveKind } from '../src/modules/rag/extract.js';
 import { buildGroundedPrompt, defuseChunkText, extractCitedNumbers, IDK_ANSWER } from '../src/modules/rag/prompt.js';
-import { getCollection, toFtsQuery } from '../src/modules/rag/store.js';
+import { getCollection, toFtsQuery, deleteCollection, listCollections } from '../src/modules/rag/store.js';
 import { hashEmbed } from '../src/providers/local.provider.js';
 import { retrieve } from '../src/modules/rag/retrieve.js';
 import { createCollectionWithDefaults, ingestFile } from '../src/modules/rag/ingest.js';
 import { runWithTenant } from '../src/tenancy/context.js';
+import { createConversation, requireConversation, updateConversation } from '../src/modules/chat/store.js';
 import { initDatabase } from '../src/db/index.js';
 import { ensureTenant } from '../src/tenancy/tenants.js';
 import { loadProviders, resetProviderInstances, setFetchImpl } from '../src/core/registry.js';
@@ -392,5 +393,61 @@ Below 99.5% monthly uptime the credit is 10%.
     const after = await inTenant(async () => getCollection(collectionId)!);
     expect(after.embedding_model).toBe('google:gemini-embedding-2');
     expect(after.dimensions).toBe(768);
+  });
+});
+
+describe('deleting a collection that a conversation is using', () => {
+  /*
+   * Regression. `conversations` points at `collections` through a COMPOSITE key
+   * `(tenant_id, collection_id)` declared ON DELETE SET NULL, and SQLite nulls
+   * every column of a composite key — including `tenant_id`, which is NOT NULL.
+   * Deleting a collection that any conversation had attached therefore failed
+   * with "NOT NULL constraint failed: conversations.tenant_id", i.e. a 500 on
+   * the ordinary path of tidying up a collection you had been chatting with.
+   */
+  let tenant: { id: string; name: string };
+
+  beforeAll(async () => {
+    await loadProviders();
+    initDatabase();
+    const t = ensureTenant('Collection Delete Test', 'key-collection-delete');
+    tenant = { id: t.id, name: t.name };
+  });
+
+  const inTenant = <T>(fn: () => Promise<T>): Promise<T> =>
+    runWithTenant({ tenantId: tenant.id, tenantName: tenant.name, requestId: newRequestId() }, fn);
+
+  it('detaches the conversation instead of failing the NOT NULL tenant column', async () => {
+    const { collectionId, conversationId } = await inTenant(async () => {
+      const collection = createCollectionWithDefaults({
+        name: 'Doomed collection',
+        embeddingModel: 'local:hash-embedding-384',
+      });
+      await ingestFile(collection.id, {
+        originalname: 'handbook.md',
+        mimetype: 'text/markdown',
+        buffer: Buffer.from('# Handbook\n\nEither party may terminate with 45 days written notice.\n', 'utf8'),
+      });
+      const conversation = createConversation({
+        title: 'uses the collection',
+        collectionId: collection.id,
+        systemPrompt: null,
+      });
+      expect(conversation.collection_id).toBe(collection.id);
+      return { collectionId: collection.id, conversationId: conversation.id };
+    });
+
+    await inTenant(async () => {
+      expect(() => deleteCollection(collectionId)).not.toThrow();
+
+      // The collection is gone...
+      expect(getCollection(collectionId)).toBeUndefined();
+      expect(listCollections().map((c) => c.id)).not.toContain(collectionId);
+
+      // ...and the conversation survives, detached, still owned by this tenant.
+      const conversation = requireConversation(conversationId);
+      expect(conversation.collection_id).toBeNull();
+      expect(conversation.id).toBe(conversationId);
+    });
   });
 });

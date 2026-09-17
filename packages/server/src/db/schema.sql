@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS conversations (
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL,
   PRIMARY KEY (tenant_id, id),
+  -- NOTE: SQLite applies SET NULL to EVERY column of a composite key, including
+  -- tenant_id (NOT NULL). deleteCollection() therefore detaches conversations
+  -- explicitly before deleting, so this clause never actually fires.
   FOREIGN KEY (tenant_id, collection_id) REFERENCES collections(tenant_id, id) ON DELETE SET NULL
 );
 

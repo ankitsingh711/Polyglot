@@ -39,7 +39,7 @@ Open <http://localhost:5173>. The tenant switcher in the top right toggles
 between the two seeded tenants.
 
 ```bash
-npm test          # 236 tests, no network
+npm test          # 237 tests, no network
 npm run typecheck # server + web
 npm run build     # production build of both
 ```
@@ -205,7 +205,7 @@ packages/server/src/
     structured/        structured output with validation
     compare/           concurrent multi-model comparison
   http/                routes, middleware, SSE transport
-packages/server/test/  236 tests; adapters and the HTTP layer driven by recorded fixtures
+packages/server/test/  237 tests; adapters and the HTTP layer driven by recorded fixtures
 packages/web/src/      React UI
 ```
 

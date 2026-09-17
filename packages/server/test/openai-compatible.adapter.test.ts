@@ -234,7 +234,12 @@ describe('Groq adapter', () => {
     expect(eventsOfType(events, 'usage')[0]!.usage).toMatchObject({ inputTokens: 11, outputTokens: 2 });
   });
 
-  it('renames max_tokens for gpt-oss models, which reject it', async () => {
+  it('sends max_tokens, and does not branch on the vendor model id to decide', async () => {
+    // The adapter used to rewrite this field for ids beginning `openai/gpt-oss`.
+    // That was the only string match on a vendor model id in the codebase, and
+    // re-checking it against the live API showed every Groq chat model accepts
+    // `max_tokens`. Per-model behaviour belongs in config/models.json, not in a
+    // prefix match that stops matching the day a vendor renames something.
     const recorder = new FetchRecorder().json({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} });
     const provider = await providerFor('groq', recorder);
     await provider.complete({
@@ -242,8 +247,8 @@ describe('Groq adapter', () => {
       messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
       maxTokens: 256,
     });
-    expect(recorder.last.body.max_completion_tokens).toBe(256);
-    expect(recorder.last.body.max_tokens).toBeUndefined();
+    expect(recorder.last.body.max_tokens).toBe(256);
+    expect(recorder.last.body.max_completion_tokens).toBeUndefined();
   });
 
   it('parses a "6m0s"-style rate limit reset header', async () => {
