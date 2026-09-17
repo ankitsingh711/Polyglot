@@ -62,7 +62,19 @@ const FUNCTIONS: Record<string, { arity: number | 'variadic'; fn: (...args: numb
 
 export class CalculatorError extends Error {}
 
-export function tokenize(input: string): Token[] {
+/**
+ * Models emit grouped numbers constantly ("1,000 * 3", "18,000 / 12"). Strip the
+ * separator BEFORE tokenizing, so "1,000" becomes one number token rather than
+ * two adjacent ones. The pattern requires exactly three digits with no space, so
+ * an argument list like `min(1, 200)` is untouched; `max(1,000)` is read as
+ * `max(1000)`, which is the reading a human would also take.
+ */
+export function stripThousandsSeparators(input: string): string {
+  return input.replace(/(\d),(?=\d{3}(?!\d))/g, '$1');
+}
+
+export function tokenize(raw: string): Token[] {
+  const input = stripThousandsSeparators(raw);
   const tokens: Token[] = [];
   let i = 0;
 
@@ -71,11 +83,7 @@ export function tokenize(input: string): Token[] {
 
     if (/\s/.test(ch)) { i++; continue; }
 
-    // Thousands separators are common in model output ("1,000 * 3").
-    if (ch === ',' ) {
-      const before = input.slice(0, i);
-      const after = input.slice(i + 1);
-      if (/\d\s*$/.test(before) && /^\s*\d{3}(?!\d)/.test(after)) { i++; continue; }
+    if (ch === ',') {
       tokens.push({ type: 'comma', value: ',', pos: i });
       i++;
       continue;
