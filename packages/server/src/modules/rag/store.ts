@@ -122,6 +122,30 @@ export function deleteCollection(id: string): void {
   });
 }
 
+export function countChunks(collectionId: string): number {
+  return (
+    forTenant()
+      .prepare<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM chunks WHERE tenant_id = :tenant_id AND collection_id = :collection_id',
+      )
+      .get({ collection_id: collectionId })?.n ?? 0
+  );
+}
+
+/**
+ * Re-pin an EMPTY collection to the model that actually served its first embed.
+ * Legal only while the collection holds no vectors -- see ingestFile, which is
+ * the sole caller and checks that.
+ */
+export function repinCollectionEmbedding(id: string, embeddingModel: string, dimensions: number): void {
+  forTenant()
+    .prepare(
+      `UPDATE collections SET embedding_model = :embedding_model, dimensions = :dimensions
+        WHERE tenant_id = :tenant_id AND id = :id`,
+    )
+    .run({ id, embedding_model: embeddingModel, dimensions });
+}
+
 export function countCollections(): number {
   return (
     forTenant()

@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chunkText, tailOverlap } from '../src/modules/rag/chunk.js';
 import { normalizeText, sanitizeFilename, resolveKind } from '../src/modules/rag/extract.js';
 import { buildGroundedPrompt, defuseChunkText, extractCitedNumbers, IDK_ANSWER } from '../src/modules/rag/prompt.js';
-import { toFtsQuery } from '../src/modules/rag/store.js';
+import { getCollection, toFtsQuery } from '../src/modules/rag/store.js';
 import { hashEmbed } from '../src/providers/local.provider.js';
 import { retrieve } from '../src/modules/rag/retrieve.js';
 import { createCollectionWithDefaults, ingestFile } from '../src/modules/rag/ingest.js';
 import { runWithTenant } from '../src/tenancy/context.js';
 import { initDatabase } from '../src/db/index.js';
 import { ensureTenant } from '../src/tenancy/tenants.js';
-import { loadProviders } from '../src/core/registry.js';
+import { loadProviders, resetProviderInstances, setFetchImpl } from '../src/core/registry.js';
 import { newRequestId } from '../src/util/ids.js';
-import { AppError } from '../src/core/errors.js';
+import { AppError, ProviderError } from '../src/core/errors.js';
 
 describe('chunking', () => {
   it('breaks on paragraph boundaries rather than mid-sentence', () => {
@@ -266,5 +266,131 @@ Below 99.5% monthly uptime the credit is 10%. Below 99.0% it is 25%.
     );
     expect(again.duplicateOf).toBeDefined();
     expect(again.costUsd).toBe(0);
+  });
+});
+
+describe('a collection pinned to a provider whose key turns out to be dead', () => {
+  const DOC = `# Handbook
+
+## Notice period
+Either party may terminate with 45 days written notice.
+
+## Credits
+Below 99.5% monthly uptime the credit is 10%.
+`;
+
+  const file = (name: string, body: string) => ({
+    originalname: name,
+    mimetype: 'text/markdown',
+    buffer: Buffer.from(body, 'utf8'),
+  });
+
+  /** Gemini's batchEmbedContents, either answering or refusing the key. */
+  function geminiFetch(mode: 'ok' | 'suspended'): typeof fetch {
+    return (async (url: string | URL | Request, init?: RequestInit) => {
+      if (!String(url).includes(':batchEmbedContents')) throw new Error(`unexpected call to ${url}`);
+      if (mode === 'suspended') {
+        return new Response(
+          JSON.stringify({ error: { code: 403, status: 'PERMISSION_DENIED', message: "Consumer 'api_key:AQ.x' has been suspended." } }),
+          { status: 403, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // One vector per requested text, at the real model's width, so the pin holds.
+      const body = JSON.parse(String(init?.body ?? '{}')) as { requests?: unknown[] };
+      const values = Array.from({ length: 768 }, (_, i) => (i % 7) / 7);
+      return new Response(
+        JSON.stringify({ embeddings: (body.requests ?? []).map(() => ({ values })) }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+  }
+
+  let tenant: { id: string; name: string };
+  let priorKey: string | undefined;
+
+  beforeAll(async () => {
+    await loadProviders();
+    initDatabase();
+    const t = ensureTenant('Dead key tenant', 'key-dead-provider');
+    tenant = { id: t.id, name: t.name };
+    // A key that is present, and therefore "configured", but rejected in flight.
+    priorKey = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = 'gemini-test-key';
+    resetProviderInstances();
+  });
+
+  afterAll(() => {
+    if (priorKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = priorKey;
+    setFetchImpl((...args) => globalThis.fetch(...args));
+  });
+
+  const inTenant = <T>(fn: () => Promise<T>): Promise<T> =>
+    runWithTenant({ tenantId: tenant.id, tenantName: tenant.name, requestId: newRequestId() }, fn);
+
+  it('re-pins itself to the model that actually answered, instead of becoming un-ingestable', async () => {
+    setFetchImpl(geminiFetch('suspended'));
+
+    const { collectionId, result } = await inTenant(async () => {
+      const collection = createCollectionWithDefaults({
+        name: 'Pinned to a dead key',
+        embeddingModel: 'google:gemini-embedding-001',
+        chunkSize: 500,
+        chunkOverlap: 80,
+      });
+      // Born pinned to a model that cannot answer: key present, key rejected.
+      expect(collection.embedding_model).toBe('google:gemini-embedding-001');
+      expect(collection.dimensions).toBe(768);
+      return { collectionId: collection.id, result: await ingestFile(collection.id, file('handbook.md', DOC)) };
+    });
+
+    expect(result.document.status).toBe('ready');
+    expect(result.chunkCount).toBeGreaterThan(0);
+
+    const repinned = await inTenant(async () => getCollection(collectionId)!);
+    expect(repinned.embedding_model).toBe('local:hash-embedding-384');
+    expect(repinned.dimensions).toBe(384);
+
+    // And the collection is genuinely usable, not merely written to.
+    const found = await inTenant(() => retrieve(collectionId, 'how much notice to terminate'));
+    expect(found.empty).toBe(false);
+    expect(found.chunks.some((c) => c.text.includes('45 days'))).toBe(true);
+  });
+
+  it('refuses to substitute once vectors exist, and names the real provider failure', async () => {
+    setFetchImpl(geminiFetch('ok'));
+
+    const collectionId = await inTenant(async () => {
+      const collection = createCollectionWithDefaults({
+        name: 'Pinned and populated',
+        embeddingModel: 'google:gemini-embedding-001',
+        chunkSize: 500,
+        chunkOverlap: 80,
+      });
+      await ingestFile(collection.id, file('first.md', DOC));
+      return collection.id;
+    });
+
+    const populated = await inTenant(async () => getCollection(collectionId)!);
+    expect(populated.embedding_model).toBe('google:gemini-embedding-001');
+
+    // The key dies between the two uploads.
+    setFetchImpl(geminiFetch('suspended'));
+
+    const err = await inTenant(() =>
+      ingestFile(collectionId, file('second.md', `${DOC}\n\n## Extra\nPremium support costs 18000 USD.`)).then(
+        () => null,
+        (e: unknown) => e,
+      ),
+    );
+
+    // Gemini's own refusal, not the dimension mismatch a silent substitution
+    // would have produced -- and the pin is untouched.
+    expect(err).toBeInstanceOf(ProviderError);
+    expect((err as ProviderError).provider).toBe('google');
+    expect((err as ProviderError).kind).toBe('auth');
+    const after = await inTenant(async () => getCollection(collectionId)!);
+    expect(after.embedding_model).toBe('google:gemini-embedding-001');
+    expect(after.dimensions).toBe(768);
   });
 });

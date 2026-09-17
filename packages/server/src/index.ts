@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './core/env.js';
 import { createApp } from './http/app.js';
 import { loadConfig } from './core/config.js';
 import { closeDatabase } from './db/index.js';

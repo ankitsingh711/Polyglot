@@ -8,12 +8,14 @@ import { chunkText } from './chunk.js';
 import { embed, resolveEmbeddingModel } from './embeddings.js';
 import { extractDocument, sanitizeFilename } from './extract.js';
 import {
+  countChunks,
   countCollections,
   countDocuments,
   createCollection,
   createDocument,
   findDocumentByHash,
   insertChunks,
+  repinCollectionEmbedding,
   requireCollection,
   updateDocumentStatus,
   type CollectionRow,
@@ -58,7 +60,8 @@ export function createCollectionWithDefaults(input: CreateCollectionInput): Coll
     embeddingModel,
     chunkSize,
     chunkOverlap,
-    // Pinned at creation: every vector in this collection must have this width.
+    // A provisional pin: nothing has proven this model can actually answer yet,
+    // so ingestFile may re-pin while the collection is still empty.
     dimensions: entry.dimensions ?? 0,
   });
   audit('collection.created', { resource: collection.id, detail: { embeddingModel, chunkSize, chunkOverlap } });
@@ -129,21 +132,47 @@ export async function ingestFile(
       throw new AppError(422, 'no_chunks', `"${filename}" produced no indexable text.`);
     }
 
+    // An empty collection has no vectors for a substitute to be incomparable
+    // with, so the chain may still rescue it. A populated one is committed: its
+    // pinned model is the only one that can produce comparable vectors, and its
+    // own failure ("key suspended") is a far better error than the dimension
+    // mismatch a substitute would trigger two lines down.
+    const isEmpty = countChunks(collectionId) === 0;
     const embedded = await embed(
       chunks.map((c) => c.text),
-      { model: collection.embedding_model, taskType: 'document', signal: opts.signal },
+      {
+        model: collection.embedding_model,
+        taskType: 'document',
+        signal: opts.signal,
+        allowFallback: isEmpty,
+      },
     );
 
-    // Hard stop rather than a silent downgrade: mixing widths inside a
-    // collection makes every later similarity score meaningless.
     if (embedded.dimensions !== collection.dimensions) {
-      throw new AppError(
-        409,
-        'embedding_dimension_mismatch',
-        `This collection is indexed with ${collection.embedding_model} (${collection.dimensions} dimensions) but the ` +
-          `embedding request was served by ${embedded.model} (${embedded.dimensions} dimensions). ` +
-          'Configure the original provider, or create a new collection.',
-      );
+      // Hard stop rather than a silent downgrade: mixing widths inside a
+      // collection makes every later similarity score meaningless.
+      if (!isEmpty) {
+        throw new AppError(
+          409,
+          'embedding_dimension_mismatch',
+          `This collection is indexed with ${collection.embedding_model} (${collection.dimensions} dimensions) but the ` +
+            `embedding request was served by ${embedded.model} (${embedded.dimensions} dimensions). ` +
+            'Restore access to the original provider, or create a new collection.',
+        );
+      }
+      // Still empty: adopt the model that actually answered, so a dead key on
+      // the preferred provider costs a warning rather than the collection.
+      repinCollectionEmbedding(collectionId, embedded.model, embedded.dimensions);
+      logger.warn('rag.collection_repinned', {
+        collectionId,
+        from: collection.embedding_model,
+        to: embedded.model,
+        dimensions: embedded.dimensions,
+      });
+      audit('collection.repinned', {
+        resource: collectionId,
+        detail: { from: collection.embedding_model, to: embedded.model, dimensions: embedded.dimensions },
+      });
     }
 
     insertChunks(document.id, collectionId, chunks, embedded.vectors, embedded.model);

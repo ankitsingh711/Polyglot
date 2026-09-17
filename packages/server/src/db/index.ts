@@ -36,7 +36,12 @@ export function databasePath(): string {
   if (!configured) return join(REPO_ROOT, 'data', 'polyglot.sqlite');
   // `resolve(':memory:')` yields `<cwd>/:memory:`, which SQLite happily creates
   // as a real file -- so the tests were silently writing to disk instead of RAM.
-  return configured === IN_MEMORY ? IN_MEMORY : resolve(configured);
+  if (configured === IN_MEMORY) return IN_MEMORY;
+  // Relative to the REPO, not to the shell. `DATABASE_PATH=./data/polyglot.sqlite`
+  // resolved against cwd meant `npm run seed` from packages/server seeded a
+  // second, separate database, and the server started from the root then
+  // rejected every one of those tenants' keys. An absolute path is untouched.
+  return resolve(REPO_ROOT, configured);
 }
 
 function connect(): Database.Database {

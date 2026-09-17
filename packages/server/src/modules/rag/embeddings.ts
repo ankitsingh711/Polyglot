@@ -17,8 +17,16 @@ import { logger } from '../../util/logger.js';
  * One thing that is NOT swappable at will, and the reason `collections` stores
  * `embedding_model` and `dimensions`: vectors from two different models are not
  * comparable. Changing a collection's embedding model requires re-embedding it,
- * so the model is pinned per collection at creation and the mismatch is refused
- * loudly rather than returning quietly meaningless similarity scores.
+ * so the model is pinned per collection and the mismatch is refused loudly
+ * rather than returning quietly meaningless similarity scores.
+ *
+ * The pin is provisional until the first vector lands. A key can be present and
+ * still be dead (revoked, suspended, out of quota), so choosing the pin from
+ * `isProviderConfigured` alone would let a collection be born pinned to a model
+ * that can never answer -- permanently un-ingestable, since every fallback the
+ * chain offers has the wrong width. Ingest therefore re-pins a still-empty
+ * collection to whichever model actually served it, and only once vectors exist
+ * does the pin become binding (`allowFallback: false`).
  */
 
 /** Providers cap how many inputs one embed call may carry. */
@@ -29,6 +37,13 @@ export interface EmbedOptions {
   taskType?: 'query' | 'document';
   signal?: AbortSignal;
   conversationId?: string | null;
+  /**
+   * Whether a chain entry may answer when the requested model fails. Default
+   * true. Pass false when the vectors must be comparable with ones already
+   * stored: a substitute cannot produce those, so the requested model's own
+   * error ("key suspended") is the useful one to surface.
+   */
+  allowFallback?: boolean;
 }
 
 export interface EmbedResult {
@@ -41,8 +56,9 @@ export interface EmbedResult {
   fallbackFrom?: string;
 }
 
-function chain(preferred: string): string[] {
+function chain(preferred: string, allowFallback = true): string[] {
   const cfg = appConfig();
+  if (!allowFallback) return [preferred];
   const ordered = [preferred, ...cfg.fallback.embeddingChain.filter((m) => m !== preferred)];
   return ordered.filter((id, i) => {
     const entry = getModelEntry(id);
@@ -98,7 +114,7 @@ export async function embed(texts: string[], opts: EmbedOptions = {}): Promise<E
   }
 
   const requested = opts.model ?? appConfig().defaults.embeddingModel;
-  const candidates = chain(requested);
+  const candidates = chain(requested, opts.allowFallback ?? true);
   const policy = defaultRetryPolicy();
   const requestId = currentTenant().requestId;
   let lastError: unknown;

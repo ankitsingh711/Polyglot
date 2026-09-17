@@ -1,9 +1,10 @@
-import 'dotenv/config';
+import '../core/env.js';
 import { initDatabase, closeDatabase, forTenant } from './index.js';
 import { ensureTenant, listTenants } from '../tenancy/tenants.js';
 import { runWithTenant } from '../tenancy/context.js';
 import { newRequestId } from '../util/ids.js';
 import { createCollectionWithDefaults, ingestFile } from '../modules/rag/ingest.js';
+import { getCollection } from '../modules/rag/store.js';
 import { createConversation } from '../modules/chat/store.js';
 import { loadProviders } from '../core/registry.js';
 
@@ -88,8 +89,11 @@ async function seedTenant(
     });
     createConversation({ title: `${name} onboarding`, collectionId: collection.id });
 
+    // Re-read: ingestion may have re-pinned the collection to whichever model
+    // actually served it, so `collection` holds the pre-ingest guess.
+    const indexed = getCollection(collection.id) ?? collection;
     process.stdout.write(
-      `  ${name}: collection "${collection.name}" (${collection.embedding_model}), ` +
+      `  ${name}: collection "${indexed.name}" (${indexed.embedding_model}), ` +
         `${result.chunkCount} chunks from ${filename}\n`,
     );
   });
