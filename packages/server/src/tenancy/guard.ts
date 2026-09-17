@@ -34,8 +34,20 @@ export const TENANT_SCOPED_TABLES: ReadonlySet<string> = new Set([
   'audit_log',
 ]);
 
-/** Tables that are global by design and therefore exempt. */
-export const GLOBAL_TABLES: ReadonlySet<string> = new Set(['tenants', 'schema_migrations', 'sqlite_master', 'sqlite_sequence']);
+/**
+ * Names that are global by design and therefore exempt: the two real global
+ * tables, SQLite's own catalogue, and the table-valued functions we use for
+ * array binding (`json_each` is how a list of ids is passed to a single
+ * prepared statement, since SQLite has no array parameter type).
+ */
+export const GLOBAL_TABLES: ReadonlySet<string> = new Set([
+  'tenants',
+  'schema_migrations',
+  'sqlite_master',
+  'sqlite_sequence',
+  'json_each',
+  'json_tree',
+]);
 
 /** The bound parameter the framework injects. Callers may not supply it. */
 export const TENANT_PARAM = 'tenant_id';
