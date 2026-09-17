@@ -28,14 +28,20 @@ type Params = Record<string, unknown>;
 
 let db: Database.Database | null = null;
 
+/** SQLite's in-memory sentinel. NOT a path, and must never be resolved as one. */
+const IN_MEMORY = ':memory:';
+
 export function databasePath(): string {
   const configured = process.env.DATABASE_PATH?.trim();
-  return configured ? resolve(configured) : join(REPO_ROOT, 'data', 'polyglot.sqlite');
+  if (!configured) return join(REPO_ROOT, 'data', 'polyglot.sqlite');
+  // `resolve(':memory:')` yields `<cwd>/:memory:`, which SQLite happily creates
+  // as a real file -- so the tests were silently writing to disk instead of RAM.
+  return configured === IN_MEMORY ? IN_MEMORY : resolve(configured);
 }
 
 function connect(): Database.Database {
   const path = databasePath();
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+  if (path !== IN_MEMORY) mkdirSync(dirname(path), { recursive: true });
 
   const handle = new Database(path);
   // WAL so a long ingestion does not block chat reads.
@@ -78,7 +84,7 @@ export function initDatabase(): void {
 export function resetDatabaseForTests(): void {
   db?.close();
   db = null;
-  process.env.DATABASE_PATH = ':memory:';
+  process.env.DATABASE_PATH = IN_MEMORY;
   raw();
 }
 

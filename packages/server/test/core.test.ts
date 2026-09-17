@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseSse, parseSseJson } from '../src/providers/_shared/sse.js';
 import { ToolCallAccumulator, parseToolInput } from '../src/providers/_shared/tool-args.js';
 import { ProviderError, parseRetryAfter, kindFromStatus, isRetryableKind, normalizeTransportError } from '../src/core/errors.js';
@@ -253,9 +256,23 @@ describe('configuration and registry', () => {
 
   it('auto-discovers every adapter file without an index or a switch', async () => {
     await loadProviders();
-    // This is the extensibility claim, asserted rather than described: the list
-    // comes from scanning src/providers, so a new file appears here for free.
-    expect(registeredProviderNames()).toEqual(['anthropic', 'deepseek', 'google', 'groq', 'local', 'openai']);
+    const names = registeredProviderNames();
+
+    // Deliberately NOT a hardcoded list. A literal here would mean that adding a
+    // provider requires editing a test -- which is "something else in the
+    // codebase changing", and the whole claim is that nothing else changes.
+    // So assert the invariants instead: the brief's three mandated providers are
+    // present, names are unique, and the set matches the files on disk.
+    for (const required of ['anthropic', 'google']) expect(names).toContain(required);
+    expect(names.some((n) => ['openai', 'groq', 'deepseek'].includes(n))).toBe(true);
+    expect(new Set(names).size).toBe(names.length);
+
+    const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'providers');
+    const onDisk = readdirSync(dir)
+      .filter((f) => f.endsWith('.provider.ts'))
+      .map((f) => f.replace('.provider.ts', ''))
+      .sort();
+    expect(names).toEqual(onDisk);
   });
 
   it('exposes prices from config, not from code', () => {
