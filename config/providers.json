@@ -1,0 +1,60 @@
+{
+  "$schemaVersion": 1,
+  "_comment": "Transport-level config only. Adding a provider = add an entry here + one file in src/providers/<name>.provider.ts. Nothing else in the codebase changes.",
+  "providers": {
+    "anthropic": {
+      "baseUrl": "https://api.anthropic.com",
+      "apiKeyEnv": "ANTHROPIC_API_KEY",
+      "timeoutMs": 120000,
+      "options": {
+        "apiVersion": "2023-06-01",
+        "promptCacheMinChars": 2000
+      }
+    },
+    "google": {
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "apiKeyEnv": "GEMINI_API_KEY",
+      "timeoutMs": 120000,
+      "options": {
+        "apiVersion": "v1beta"
+      }
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "timeoutMs": 120000,
+      "options": {
+        "supportsStreamOptions": true,
+        "supportsJsonSchema": true,
+        "supportsParallelToolCalls": true
+      }
+    },
+    "groq": {
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "apiKeyEnv": "GROQ_API_KEY",
+      "timeoutMs": 60000,
+      "options": {
+        "supportsStreamOptions": true,
+        "supportsJsonSchema": true,
+        "supportsParallelToolCalls": true
+      }
+    },
+    "deepseek": {
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "timeoutMs": 180000,
+      "options": {
+        "supportsStreamOptions": false,
+        "supportsJsonSchema": false,
+        "supportsParallelToolCalls": false,
+        "reasoningField": "reasoning_content"
+      }
+    },
+    "local": {
+      "baseUrl": "local://",
+      "apiKeyEnv": null,
+      "timeoutMs": 5000,
+      "options": {}
+    }
+  }
+}

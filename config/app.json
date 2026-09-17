@@ -1,0 +1,86 @@
+{
+  "$schemaVersion": 1,
+  "defaults": {
+    "chatModel": "anthropic:claude-haiku-4-5",
+    "embeddingModel": "openai:text-embedding-3-small",
+    "maxTokens": 2048,
+    "temperature": 0.2
+  },
+  "retry": {
+    "_comment": "Applied ONLY to kinds in this list. Never auth, bad_request, context_length, content_filter or cancelled.",
+    "maxAttempts": 3,
+    "baseDelayMs": 400,
+    "maxDelayMs": 20000,
+    "jitter": "full",
+    "retryOn": ["rate_limit", "server_error", "timeout"],
+    "respectRetryAfter": true,
+    "maxRetryAfterMs": 30000
+  },
+  "fallback": {
+    "_comment": "Ordered chains. If the requested model's chain is defined, Polyglot walks it after retries are exhausted. A fallback hop is surfaced in the UI and recorded in the usage row.",
+    "enabled": true,
+    "maxHops": 2,
+    "chains": {
+      "anthropic:claude-sonnet-4-5": ["anthropic:claude-haiku-4-5", "google:gemini-2.5-flash"],
+      "anthropic:claude-haiku-4-5": ["google:gemini-2.5-flash", "groq:llama-3.3-70b-versatile"],
+      "anthropic:claude-opus-4-1": ["anthropic:claude-sonnet-4-5", "google:gemini-2.5-pro"],
+      "google:gemini-2.5-pro": ["google:gemini-2.5-flash", "anthropic:claude-sonnet-4-5"],
+      "google:gemini-2.5-flash": ["anthropic:claude-haiku-4-5", "groq:llama-3.1-8b-instant"],
+      "openai:gpt-4.1": ["openai:gpt-4.1-mini", "anthropic:claude-sonnet-4-5"],
+      "openai:gpt-4.1-mini": ["google:gemini-2.5-flash"],
+      "openai:gpt-4o-mini": ["google:gemini-2.5-flash-lite"],
+      "groq:llama-3.3-70b-versatile": ["groq:llama-3.1-8b-instant", "google:gemini-2.5-flash"],
+      "deepseek:deepseek-chat": ["google:gemini-2.5-flash"],
+      "deepseek:deepseek-reasoner": ["deepseek:deepseek-chat"]
+    },
+    "embeddingChain": ["openai:text-embedding-3-small", "google:gemini-embedding-001", "local:hash-embedding-384"]
+  },
+  "context": {
+    "_comment": "Context-window overflow strategy. 'reject' fails loudly; 'truncate' drops oldest whole turns; 'summarize' folds dropped turns into a summary using summaryModel. Documented in docs/DESIGN.md.",
+    "strategy": "summarize",
+    "summaryModel": "anthropic:claude-haiku-4-5",
+    "reservedOutputTokens": 2048,
+    "headroomRatio": 0.9,
+    "keepRecentTurns": 4
+  },
+  "rag": {
+    "chunkSize": 900,
+    "chunkOverlap": 150,
+    "topK": 6,
+    "similarityThreshold": 0.28,
+    "retrievalMode": "hybrid",
+    "rrfK": 60,
+    "maxContextChars": 12000,
+    "minChunkChars": 60
+  },
+  "limits": {
+    "maxRequestBodyBytes": 2097152,
+    "maxUploadBytes": 20971520,
+    "maxFilesPerUpload": 10,
+    "maxMessagesPerConversation": 500,
+    "maxPromptChars": 100000,
+    "maxToolIterations": 6,
+    "maxCostPerRequestUsd": 1.0,
+    "tenantDailyBudgetUsd": 25.0,
+    "rateLimitPerMinute": 60,
+    "maxCollectionsPerTenant": 50,
+    "maxDocumentsPerCollection": 200
+  },
+  "tools": {
+    "enabled": ["calculator", "get_weather", "search_documents"],
+    "weather": {
+      "geocodeUrl": "https://geocoding-api.open-meteo.com/v1/search",
+      "forecastUrl": "https://api.open-meteo.com/v1/forecast",
+      "timeoutMs": 8000
+    }
+  },
+  "cache": {
+    "_comment": "Optional extra: semantic prompt cache keyed by embedding similarity, scoped per tenant.",
+    "semantic": {
+      "enabled": true,
+      "similarityThreshold": 0.96,
+      "ttlSeconds": 3600,
+      "maxEntriesPerTenant": 500
+    }
+  }
+}

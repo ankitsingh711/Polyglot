@@ -1,0 +1,209 @@
+{
+  "$schemaVersion": 1,
+  "pricingCheckedOn": "2025-09-17",
+  "pricingSources": {
+    "anthropic": "https://www.anthropic.com/pricing#api",
+    "google": "https://ai.google.dev/gemini-api/docs/pricing",
+    "openai": "https://openai.com/api/pricing/",
+    "groq": "https://groq.com/pricing/",
+    "deepseek": "https://api-docs.deepseek.com/quick_start/pricing"
+  },
+  "_comment": "All prices are USD per 1,000,000 tokens. See docs/PROVIDER_NOTES.md for how each number was sourced and the caveats (tiered pricing, batch discounts, cache-write surcharges).",
+  "models": {
+    "anthropic:claude-sonnet-4-5": {
+      "displayName": "Claude Sonnet 4.5",
+      "provider": "anthropic",
+      "providerModelId": "claude-sonnet-4-5",
+      "kind": "chat",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 3.0, "outputPerMTok": 15.0, "cachedInputPerMTok": 0.3, "cacheWritePerMTok": 3.75 }
+    },
+    "anthropic:claude-haiku-4-5": {
+      "displayName": "Claude Haiku 4.5",
+      "provider": "anthropic",
+      "providerModelId": "claude-haiku-4-5",
+      "kind": "chat",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 1.0, "outputPerMTok": 5.0, "cachedInputPerMTok": 0.1, "cacheWritePerMTok": 1.25 }
+    },
+    "anthropic:claude-opus-4-1": {
+      "displayName": "Claude Opus 4.1",
+      "provider": "anthropic",
+      "providerModelId": "claude-opus-4-1",
+      "kind": "chat",
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 15.0, "outputPerMTok": 75.0, "cachedInputPerMTok": 1.5, "cacheWritePerMTok": 18.75 }
+    },
+    "anthropic:claude-3-5-haiku": {
+      "displayName": "Claude Haiku 3.5",
+      "provider": "anthropic",
+      "providerModelId": "claude-3-5-haiku-latest",
+      "kind": "chat",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.8, "outputPerMTok": 4.0, "cachedInputPerMTok": 0.08, "cacheWritePerMTok": 1.0 }
+    },
+
+    "google:gemini-2.5-pro": {
+      "displayName": "Gemini 2.5 Pro",
+      "provider": "google",
+      "providerModelId": "gemini-2.5-pro",
+      "kind": "chat",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "reasoning": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 1.25, "outputPerMTok": 10.0, "cachedInputPerMTok": 0.31 }
+    },
+    "google:gemini-2.5-flash": {
+      "displayName": "Gemini 2.5 Flash",
+      "provider": "google",
+      "providerModelId": "gemini-2.5-flash",
+      "kind": "chat",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "reasoning": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.3, "outputPerMTok": 2.5, "cachedInputPerMTok": 0.075 }
+    },
+    "google:gemini-2.5-flash-lite": {
+      "displayName": "Gemini 2.5 Flash-Lite",
+      "provider": "google",
+      "providerModelId": "gemini-2.5-flash-lite",
+      "kind": "chat",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.1, "outputPerMTok": 0.4, "cachedInputPerMTok": 0.025 }
+    },
+    "google:gemini-embedding-001": {
+      "displayName": "Gemini Embedding 001",
+      "provider": "google",
+      "providerModelId": "gemini-embedding-001",
+      "kind": "embedding",
+      "contextWindow": 2048,
+      "dimensions": 768,
+      "capabilities": { "tools": false, "vision": false, "jsonSchema": false, "streaming": false },
+      "pricing": { "inputPerMTok": 0.15, "outputPerMTok": 0.0 }
+    },
+
+    "openai:gpt-4.1": {
+      "displayName": "GPT-4.1",
+      "provider": "openai",
+      "providerModelId": "gpt-4.1",
+      "kind": "chat",
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 2.0, "outputPerMTok": 8.0, "cachedInputPerMTok": 0.5 }
+    },
+    "openai:gpt-4.1-mini": {
+      "displayName": "GPT-4.1 mini",
+      "provider": "openai",
+      "providerModelId": "gpt-4.1-mini",
+      "kind": "chat",
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.4, "outputPerMTok": 1.6, "cachedInputPerMTok": 0.1 }
+    },
+    "openai:gpt-4o-mini": {
+      "displayName": "GPT-4o mini",
+      "provider": "openai",
+      "providerModelId": "gpt-4o-mini",
+      "kind": "chat",
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "capabilities": { "tools": true, "vision": true, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.15, "outputPerMTok": 0.6, "cachedInputPerMTok": 0.075 }
+    },
+    "openai:text-embedding-3-small": {
+      "displayName": "text-embedding-3-small",
+      "provider": "openai",
+      "providerModelId": "text-embedding-3-small",
+      "kind": "embedding",
+      "contextWindow": 8191,
+      "dimensions": 1536,
+      "capabilities": { "tools": false, "vision": false, "jsonSchema": false, "streaming": false },
+      "pricing": { "inputPerMTok": 0.02, "outputPerMTok": 0.0 }
+    },
+    "openai:text-embedding-3-large": {
+      "displayName": "text-embedding-3-large",
+      "provider": "openai",
+      "providerModelId": "text-embedding-3-large",
+      "kind": "embedding",
+      "contextWindow": 8191,
+      "dimensions": 3072,
+      "capabilities": { "tools": false, "vision": false, "jsonSchema": false, "streaming": false },
+      "pricing": { "inputPerMTok": 0.13, "outputPerMTok": 0.0 }
+    },
+
+    "groq:llama-3.3-70b-versatile": {
+      "displayName": "Llama 3.3 70B (Groq)",
+      "provider": "groq",
+      "providerModelId": "llama-3.3-70b-versatile",
+      "kind": "chat",
+      "contextWindow": 131072,
+      "maxOutputTokens": 32768,
+      "capabilities": { "tools": true, "vision": false, "jsonSchema": true, "streaming": true },
+      "pricing": { "inputPerMTok": 0.59, "outputPerMTok": 0.79 }
+    },
+    "groq:llama-3.1-8b-instant": {
+      "displayName": "Llama 3.1 8B (Groq)",
+      "provider": "groq",
+      "providerModelId": "llama-3.1-8b-instant",
+      "kind": "chat",
+      "contextWindow": 131072,
+      "maxOutputTokens": 131072,
+      "capabilities": { "tools": true, "vision": false, "jsonSchema": true, "streaming": true },
+      "pricing": { "inputPerMTok": 0.05, "outputPerMTok": 0.08 }
+    },
+    "groq:gpt-oss-120b": {
+      "displayName": "GPT-OSS 120B (Groq)",
+      "provider": "groq",
+      "providerModelId": "openai/gpt-oss-120b",
+      "kind": "chat",
+      "contextWindow": 131072,
+      "maxOutputTokens": 65536,
+      "capabilities": { "tools": true, "vision": false, "jsonSchema": true, "streaming": true, "reasoning": true },
+      "pricing": { "inputPerMTok": 0.15, "outputPerMTok": 0.75 }
+    },
+
+    "deepseek:deepseek-chat": {
+      "displayName": "DeepSeek Chat",
+      "provider": "deepseek",
+      "providerModelId": "deepseek-chat",
+      "kind": "chat",
+      "contextWindow": 65536,
+      "maxOutputTokens": 8192,
+      "capabilities": { "tools": true, "vision": false, "jsonSchema": true, "streaming": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.27, "outputPerMTok": 1.1, "cachedInputPerMTok": 0.07 }
+    },
+    "deepseek:deepseek-reasoner": {
+      "displayName": "DeepSeek Reasoner",
+      "provider": "deepseek",
+      "providerModelId": "deepseek-reasoner",
+      "kind": "chat",
+      "contextWindow": 65536,
+      "maxOutputTokens": 65536,
+      "capabilities": { "tools": false, "vision": false, "jsonSchema": false, "streaming": true, "reasoning": true, "promptCaching": true },
+      "pricing": { "inputPerMTok": 0.55, "outputPerMTok": 2.19, "cachedInputPerMTok": 0.14 }
+    },
+
+    "local:hash-embedding-384": {
+      "displayName": "Local hashed embedding (offline dev)",
+      "provider": "local",
+      "providerModelId": "hash-embedding-384",
+      "kind": "embedding",
+      "contextWindow": 100000,
+      "dimensions": 384,
+      "capabilities": { "tools": false, "vision": false, "jsonSchema": false, "streaming": false },
+      "pricing": { "inputPerMTok": 0.0, "outputPerMTok": 0.0 }
+    }
+  }
+}

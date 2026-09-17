@@ -1,0 +1,33 @@
+{
+  "name": "polyglot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Polyglot — multi-provider, multi-tenant AI workbench",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "workspaces": [
+    "packages/server",
+    "packages/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev -w @polyglot/server",
+    "dev:web": "npm run dev -w @polyglot/web",
+    "build": "npm run build -w @polyglot/server && npm run build -w @polyglot/web",
+    "start": "npm run start -w @polyglot/server",
+    "test": "npm run test -w @polyglot/server",
+    "test:watch": "npm run test:watch -w @polyglot/server",
+    "typecheck": "npm run typecheck -w @polyglot/server && npm run typecheck -w @polyglot/web",
+    "seed": "npm run seed -w @polyglot/server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true,
+    "fsevents@2.3.3": true
+  }
+}
