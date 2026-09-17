@@ -282,6 +282,17 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
   const history: StoredMessage[] = listMessages(conversation.id);
   let working: Message[] = toProviderMessages(history);
 
+  /*
+   * What this turn PRODUCED, tracked separately from `working`.
+   *
+   * `working` is the prompt we send, and compaction rewrites it -- it can drop
+   * older turns, prepend a summary, and end up SHORTER than the history we
+   * started from. Deriving the new messages by slicing `working` at the history
+   * length therefore persists the wrong rows (or none) the moment a long
+   * conversation compacts, which is exactly when it is hardest to notice.
+   */
+  const produced: Message[] = [];
+
   let finalText = '';
   let finalReasoning = '';
   let finishReason: FinishReason = 'stop';
@@ -416,7 +427,11 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
 
     // No tool calls: the model is done talking.
     if (!pendingToolUses.length) {
-      if (assistantBlocks.length) working = [...working, { role: 'assistant', content: assistantBlocks }];
+      if (assistantBlocks.length) {
+        const assistantMessage: Message = { role: 'assistant', content: assistantBlocks };
+        working = [...working, assistantMessage];
+        produced.push(assistantMessage);
+      }
       break;
     }
 
@@ -428,7 +443,11 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
         message: `Stopped after ${cfg.limits.maxToolIterations} tool rounds to avoid a loop. The answer may be incomplete.`,
       };
       finishReason = 'max_tokens';
-      if (assistantBlocks.length) working = [...working, { role: 'assistant', content: assistantBlocks }];
+      if (assistantBlocks.length) {
+        const assistantMessage: Message = { role: 'assistant', content: assistantBlocks };
+        working = [...working, assistantMessage];
+        produced.push(assistantMessage);
+      }
       break;
     }
 
@@ -510,11 +529,10 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
       }
     }
 
-    working = [
-      ...working,
-      { role: 'assistant', content: assistantBlocks },
-      { role: 'tool', content: toolResultBlocks },
-    ];
+    const assistantMessage: Message = { role: 'assistant', content: assistantBlocks };
+    const toolMessage: Message = { role: 'tool', content: toolResultBlocks };
+    working = [...working, assistantMessage, toolMessage];
+    produced.push(assistantMessage, toolMessage);
   }
 
   // -------------------------------------------------------------------------
@@ -522,12 +540,11 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
   // -------------------------------------------------------------------------
   // Everything the model produced in this turn, including intermediate tool
   // rounds, so the next turn replays what actually happened.
-  const newMessages = working.slice(history.length);
   let assistantMessageId = '';
 
-  for (const message of newMessages) {
+  for (const message of produced) {
     if (message.role === 'user') continue; // already persisted
-    const isFinalAssistant = message === newMessages[newMessages.length - 1] && message.role === 'assistant';
+    const isFinalAssistant = message === produced[produced.length - 1] && message.role === 'assistant';
     const cited = isFinalAssistant && citations.length
       ? filterCitations(citations, textOf(message.content))
       : undefined;
