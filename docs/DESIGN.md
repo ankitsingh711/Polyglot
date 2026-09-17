@@ -144,7 +144,14 @@ a different schema dialect), not parametric.
 
 ### Exactly what you would write to add a provider
 
-Say Mistral. **One file:**
+The brief asks for "one new file and one config entry". This is one new file and
+two config *files* — `providers.json` (how to reach the vendor) and `models.json`
+(what it offers and what it costs). Both are pure data with no code in them, and
+they are separate because a provider's transport outlives any particular model:
+Gemini 2.5 was retired out from under this repo while it was being written, and
+that was a `models.json` edit with `providers.json` untouched. Say Mistral.
+
+**One file:**
 
 ```ts
 // packages/server/src/providers/mistral.provider.ts
@@ -155,6 +162,7 @@ import type { ProviderInit } from '../core/types.js';
 class MistralProvider extends OpenAICompatibleProvider {
   constructor(init: ProviderInit) {
     super(init, {
+      // Wire-format quirks that are true of the VENDOR, not of one model.
       supportsStreamOptions: true,
       supportsJsonSchema: false,   // json_object only
       supportsParallelToolCalls: true,
@@ -169,12 +177,12 @@ registerProvider('mistral', (init) => new MistralProvider(init));
 **Two config entries:**
 
 ```jsonc
-// config/providers.json
+// config/providers.json — transport only
 "mistral": {
   "baseUrl": "https://api.mistral.ai/v1",
   "apiKeyEnv": "MISTRAL_API_KEY",
   "timeoutMs": 120000,
-  "options": { "supportsJsonSchema": false }
+  "options": {}
 }
 
 // config/models.json
@@ -184,10 +192,17 @@ registerProvider('mistral', (init) => new MistralProvider(init));
   "kind": "chat",
   "contextWindow": 131072,
   "maxOutputTokens": 8192,
+  // Per-MODEL capabilities. `temperature: false` would make the gateway strip
+  // the parameter for this model only; omit it and the model accepts one.
   "capabilities": { "tools": true, "vision": false, "jsonSchema": false, "streaming": true },
   "pricing": { "inputPerMTok": 2.0, "outputPerMTok": 6.0 }
 }
 ```
+
+Note the division: anything that varies *per model* belongs in `models.json`,
+and only genuine wire-format quirks go in the adapter's constructor. Putting a
+capability in both would be a trap, because the constructor argument is spread
+last and would silently win over the config it appears to duplicate.
 
 That is the entire change. No index file, no switch, no DI registration, no UI
 edit — the model picker, metrics, fallback chains and cost accounting all read
@@ -412,7 +427,7 @@ access, no call into anything the parser did not define. `new Function`, a
 sandboxed `vm` and regex-allowlist-then-eval are all rejected for the same reason:
 they end in an interpreter that was not designed to be one. Input length, token
 count, nesting depth and exponent magnitude are bounded, because a model can call
-this in a loop. Twelve escape attempts are in the test suite.
+this in a loop. Eleven escape attempts are in the test suite.
 
 **No SSRF surface.** Tool endpoints come from config; only typed, range-checked
 values are interpolated. `get_weather` geocodes through *our* endpoint and passes
@@ -518,43 +533,37 @@ Chose: turn-level granularity plus an orphan sweep, with the user always told.
 Rejected: message-level truncation. An orphaned `tool_result` with no matching
 `tool_use` is a hard 400 on Anthropic and OpenAI and is silently mis-attributed by
 Gemini — so naive truncation corrupts exactly the conversations that are hardest
-to debug.
+to debug. The decision of *when* to compact runs on a character-based token
+estimate, never four vendor tokenizers (three of which are network calls on the
+hot path); `context.headroomRatio` absorbs the error, and every number that is
+actually billed comes from the provider's own `usage`, not the estimate.
 
-**9. Cold-stream-only retry.**
-Chose: retry a stream only before a single token has reached the client; after
-that, surface the error.
-Rejected: buffering the whole response so it can be replayed — that is fake
-streaming with extra memory, and the brief is explicit about it.
+**9. Retry only a cold stream; fall back on `auth`, never on `bad_request`.**
+Chose: retry a stream only before a single token has reached the client, and hop
+to the next provider on a missing or revoked key — which is also what keeps the
+app usable for a reviewer holding two of five keys.
+Rejected: buffering the whole response so it can be replayed (that is fake
+streaming with extra memory), and retrying a malformed request, which will fail
+identically everywhere.
+Cost: a genuinely misconfigured key is masked by a working fallback, so the hop
+is surfaced in the UI and recorded on the usage row.
 
-**10. Fallback on `auth`, but never on `bad_request`.**
-Chose: a missing or revoked key hops to the next provider (this is also what makes
-the app usable for a reviewer holding only two of five keys); a malformed request
-fails fast, because it will fail identically everywhere.
-Cost: a genuinely misconfigured key is masked by a working fallback. The fallback
-is surfaced in the UI and recorded on the usage row for exactly that reason.
-
-**11. Token estimation by heuristic, never for billing.**
-Chose: a character-based estimate for compaction decisions and pre-flight cost
-caps only. Every billed number comes from the provider's own `usage`.
-Rejected: four vendor tokenizers, three of which are network calls on the hot
-path. `context.headroomRatio` is the margin that absorbs the error.
-
-**12. Light theme only, with self-hosted variable fonts.**
-Chose: one carefully built light theme (warm neutral ramp, single saturated
-accent, per-provider hues), with Inter and JetBrains Mono bundled by Vite and
-served from our own origin.
-Rejected: a theme toggle, which doubles the surface every colour decision has to
-be checked against for a workbench whose dense numeric tables want maximum
-contrast; and Google Fonts, which would have forced the Content-Security-Policy
-open to a font CDN. Self-hosting keeps `font-src 'self' data:`.
-Cost: no dark mode. It is the first thing I would add, and the token file is
-structured so it is a second `:root` block rather than a rewrite.
-
-**13. SSE over WebSockets.**
-Chose: one-way text, survives proxies, reuses the HTTP auth we already have.
-POST + `fetch` rather than `EventSource`, because `EventSource` cannot set headers
-and would force the tenant key into the query string — and therefore into access
-logs and browser history.
+**10. Per-model capabilities in config; opaque vendor tokens in the contract.**
+Chose: two escape hatches, both narrow. Divergence that varies *per model* is a
+config flag the gateway applies on every hop (`capabilities.tools`,
+`capabilities.temperature`); divergence that is an opaque token the vendor minted
+rides in `ContentBlock.providerMetadata`, namespaced by provider, readable only
+by the adapter that wrote it.
+Rejected: `if (provider === 'google')` anywhere above the adapter layer, and a
+bare metadata blob with no namespace — a conversation can change provider between
+turns, so Anthropic must not be handed Gemini's `thoughtSignature`.
+Why it earns its place: both cases are real and both are invisible until they
+bite. Claude Sonnet 5 and Opus 5 hard-400 on `temperature` while Haiku 4.5 and
+Sonnet 4.5 on the same adapter accept it, so the flag cannot live in the adapter.
+Gemini 3 rejects a replayed tool call whose `thoughtSignature` is missing, which
+breaks the second leg of every multi-turn tool loop and nothing else.
+Cost: `providerMetadata` is an `unknown` bag in an otherwise closed contract. It
+is confined to adapters by convention, and that is the weakest boundary here.
 
 ---
 

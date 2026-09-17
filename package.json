@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Polyglot — multi-provider, multi-tenant AI workbench",
+  "description": "Polyglot \u2014 multi-provider, multi-tenant AI workbench",
   "engines": {
-    "node": ">=20.11"
+    "node": ">=22.12"
   },
   "workspaces": [
     "packages/server",

@@ -12,8 +12,8 @@ config/           models, pricing, providers, retry, fallback, RAG defaults
 docs/             DESIGN.md · PROVIDER_NOTES.md · AI_USAGE.md
 ```
 
-The interface is built around the thing this product is for: a header carrying
-live provider health, a context column, the work, a details panel, and a
+The interface is built around the thing this product is for: a header showing
+which provider keys are configured, a context column, the work, a details panel, and a
 **permanent telemetry bar** along the bottom showing spend today, request count,
 average latency and TTFT. Cost and provenance are not buried in a tab you have to
 remember to open. Each provider has a fixed colour that identifies it everywhere
@@ -24,8 +24,8 @@ metrics row — so a dense table is scannable without reading a label.
 
 ## Setup
 
-Requires Node 20.11+ (developed on 24). No database server, no Docker, no keys
-required to boot.
+Requires Node 22.12+ (developed on 24 — Vite 8 and Vitest 5 set that floor).
+No database server, no keys required to boot.
 
 ```bash
 git clone <this-repo> polyglot && cd polyglot
@@ -39,7 +39,7 @@ Open <http://localhost:5173>. The tenant switcher in the top right toggles
 between the two seeded tenants.
 
 ```bash
-npm test          # 179 tests, no network
+npm test          # 236 tests, no network
 npm run typecheck # server + web
 npm run build     # production build of both
 ```
@@ -68,9 +68,21 @@ Reviewers running with their own keys need only `ANTHROPIC_API_KEY` and
 6. **Metrics tab**: TTFT, latency, tokens (including cached), USD per request,
    retries, fallbacks, and the audit trail.
 
-Everything above was exercised in a real browser against a mock upstream while
-building it, including the tool loop, citations, cancellation and the responsive
-layout down to 560px.
+Everything above has been run against live Anthropic, Gemini and Groq keys, and
+is also pinned down by the test suite: `test/http.app.test.ts` boots the real
+Express app and drives these paths — SSE token streaming, persistence, tenant
+isolation and cancellation — over a real socket against a fixture upstream, so
+they are reproducible without an API key.
+
+### Run it in Docker
+
+```bash
+cp .env.example .env          # add your keys
+docker compose up --build     # single origin, UI + API on :8787
+```
+
+The image builds both workspaces and serves the built SPA from the API process
+(`SERVE_WEB_DIR`), so there is one container and one port.
 
 ---
 
@@ -78,14 +90,19 @@ layout down to 560px.
 
 ### Providers (Module A) — 5 of the 5 offered
 
-| Provider | Chat | Stream | Tools | Structured output | Embeddings |
-|---|---|---|---|---|---|
-| **Anthropic** | ✅ | ✅ | ✅ | tool-forcing | — |
-| **Google Gemini** | ✅ | ✅ | ✅ | `responseSchema` | ✅ |
-| **OpenAI** | ✅ | ✅ | ✅ | native `json_schema` | ✅ |
-| **Groq** | ✅ | ✅ | ✅ | native `json_schema` | — |
-| **DeepSeek** | ✅ | ✅ | ✅ (chat only) | `json_object` + validate + retry | — |
-| *local (offline embedder)* | — | — | — | — | ✅ |
+| Provider | Chat | Stream | Tools | Structured output | Embeddings | Verified against a live key |
+|---|---|---|---|---|---|---|
+| **Anthropic** | ✅ | ✅ | ✅ | tool-forcing | — | **yes** — Haiku 4.5, Sonnet 4.5, Sonnet 5, Opus 4.5 |
+| **Google Gemini** | ✅ | ✅ | ✅ | `responseSchema` | ✅ | **yes** — 3.8 Flash, 3.5/3.1 Flash-Lite, embedding-2 |
+| **Groq** | ✅ | ✅ | ✅ | native `json_schema` | — | **yes** — GPT-OSS 120B/20B, Qwen3.8 27B |
+| **OpenAI** | ✅ | ✅ | ✅ | native `json_schema` | ✅ | no key — recorded-fixture tests only |
+| **DeepSeek** | ✅ | ✅ | ✅ | `json_object` + validate + retry | — | no key — recorded-fixture tests only |
+| *local (offline embedder)* | — | — | — | — | ✅ | n/a |
+
+Per §7 of the brief: OpenAI and DeepSeek are implemented fully and proved by
+recorded-fixture tests of the request/response mapping, but I have no key for
+either, so **those two adapters have never made a real call.** Run them with your
+own keys and they should work; I would not claim more than that.
 
 Plain `fetch` throughout, no vendor SDKs and no abstraction framework. See
 [`docs/PROVIDER_NOTES.md`](docs/PROVIDER_NOTES.md) for the concrete differences
@@ -98,6 +115,9 @@ answer to "do you understand these providers".
   Adding a provider is one file in `src/providers/` plus config entries; the
   registry discovers adapters by scanning the directory, so no index, switch or
   DI wiring exists to edit. Two tests enforce this rather than just asserting it.
+  Capabilities that differ *per model* rather than per vendor — tool support, and
+  whether the model still accepts `temperature` — are config flags the gateway
+  applies on every hop, including after a fallback.
 - **B — Chat.** Done. Token-by-token SSE, provider/model switching mid-conversation,
   SQLite persistence, cancel that aborts the upstream socket, and an explicit
   documented context-overflow strategy (summarize, configurable to truncate/reject).
@@ -105,10 +125,13 @@ answer to "do you understand these providers".
   overlap, hybrid retrieval (dense + BM25 fused with RRF), inline citations that
   open the exact chunk, runtime-tunable parameters, and a real "I don't know"
   path that short-circuits before any model call.
-- **D — Tool calling.** Done. Three tools, one definition format, working on all
-  five providers. Multi-turn loop with parallel and sequential calls; arguments
-  accumulated from streamed fragments; graceful degradation with an explanation
-  when a model (e.g. `deepseek-reasoner`) cannot do tools.
+- **D — Tool calling.** Done. Three tools, one definition format, translated per
+  vendor. Verified live on Anthropic, Gemini and Groq (the brief asks for two,
+  one of which must be Anthropic or Gemini); implemented and fixture-tested on
+  OpenAI and DeepSeek. Multi-turn loop with parallel and sequential calls;
+  arguments accumulated from streamed fragments; graceful degradation with an
+  explanation when a model cannot do tools — `groq:compound-mini` is the live
+  case, since it ships Groq's own built-in tools and rejects user-defined ones.
 - **E — Observability and resilience.** Done. Per-request provider, model, tenant,
   TTFT, latency, tokens (fresh/cached/cache-write/reasoning), USD, finish reason,
   retry count, fallback origin. Jittered backoff on retryable kinds only,
@@ -131,7 +154,7 @@ I would rather ship this list than a longer feature table.
 
 | Cut | Why |
 |---|---|
-| **Live-key verification** | I built this without provider API keys. Every adapter is covered by fixture tests built from the vendors' documented wire formats, and the whole chat/tool/RAG path was verified end to end against a mock upstream that speaks the Anthropic protocol. **Nothing here has been run against a live provider.** Per §7 of the brief, that is stated plainly rather than implied otherwise. |
+| **Live keys for OpenAI and DeepSeek** | Those two adapters are complete and covered by recorded-fixture tests of their wire mapping, but I have no key for either and have never made a real call with them. Anthropic, Gemini and Groq *are* verified live — see the table above. Per §7 of the brief, stated plainly rather than implied otherwise. |
 | **OCR for scanned PDFs** | A PDF with no text layer is rejected with a clear message. OCR is a different problem (and a much heavier dependency) than retrieval. |
 | **Real authentication** | A tenant API key stands in for auth, as the brief permits. What I did spend effort on is the *enforcement model* behind it — see DESIGN.md §4. |
 | **Distributed rate limiting** | The limiter is an in-memory token bucket: correct for one process, wrong for several. Redis or the edge is the production answer. Flagged in code, not hidden. |
@@ -139,6 +162,7 @@ I would rather ship this list than a longer feature table.
 | **ANN vector index** | Brute-force scan over Float32 blobs: exact, no index build, no second system to keep consistent. It is O(n) and stops being right somewhere around 10^5 chunks per collection — which is why `VectorStore` is an interface. |
 | **Evaluation harness, reranking** | Genuinely interesting, and the two extras I most wanted. They lost to finishing the five modules properly. |
 | **Image input** | The contract carries image blocks and the adapters translate them for all five providers. There is no upload button, so it is reachable by API only. |
+| **A pinned model catalog** | Vendors retire models faster than a take-home lives. Building this, Gemini 2.5 closed to new keys mid-review, Groq decommissioned both Llama entries, and DeepSeek replaced its whole lineup. `config/models.json` is current as of the date in `pricingCheckedOn`, and every id in it was called for real where a key existed — but it *is* a snapshot, and refreshing it is a config edit, not a code change. |
 | **Postgres row-level security** | SQLite has no RLS, so I built the closest structural equivalent (DESIGN.md §4) and documented the migration path rather than pretending SQLite can do it. |
 
 ---
@@ -181,7 +205,7 @@ packages/server/src/
     structured/        structured output with validation
     compare/           concurrent multi-model comparison
   http/                routes, middleware, SSE transport
-packages/server/test/  179 tests; adapters driven by recorded fixtures
+packages/server/test/  236 tests; adapters and the HTTP layer driven by recorded fixtures
 packages/web/src/      React UI
 ```
 
@@ -205,10 +229,13 @@ production, is DESIGN.md §5.
 
 ## Notes for the walkthrough
 
-The two things I would most like to be asked about: `src/tenancy/guard.ts`
+The three things I would most like to be asked about: `src/tenancy/guard.ts`
 (why the boundary is structural rather than conventional, and what it still
-cannot catch) and `src/providers/google.provider.ts` (`toGeminiSchema`, and why
-it is an allow-list translator rather than a filter).
+cannot catch); `src/providers/google.provider.ts` (`toGeminiSchema`, and why it
+is an allow-list translator rather than a filter); and `ContentBlock.providerMetadata`
+(the smallest change to the shared contract that makes Gemini 3's
+`thoughtSignature` survive a multi-turn tool loop without any other layer
+learning that Google exists).
 
 `docs/AI_USAGE.md` records what I used AI for and, more usefully, where I had to
 correct it.

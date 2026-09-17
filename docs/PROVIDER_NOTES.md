@@ -107,9 +107,45 @@ originating `tool_use` block. Without it, results attach to the wrong tool with 
 error anywhere. Tested explicitly in
 `test/google.adapter.test.ts → "recovers the function NAME for a tool result"`.
 
-(Gemini 2.x does accept an optional `id` on both sides; we send it when we have
-one, but we cannot rely on it round-tripping, so name recovery is the primary
+(Gemini does accept an optional `id` on both sides; we send it when we have one,
+but we cannot rely on it round-tripping, so name recovery is the primary
 mechanism and `id` is belt-and-braces.)
+
+### Gemini 3 requires its own `thought_signature` handed back verbatim
+
+The single most expensive divergence I hit, because it is invisible right up to
+the moment it is not. Gemini 3 attaches an opaque `thoughtSignature` to every
+`functionCall` part it emits. Replay that tool call on the next turn without it
+and the request fails:
+
+```
+400  Function call is missing a thought_signature in functionCall parts.
+     This is required for tools to work correctly, and missing
+     thought_signature will result in degraded model performance.
+```
+
+Note what this breaks. The *first* leg of a tool turn succeeds: the model asks for
+a tool and the tools stream perfectly. The failure lands on the second leg, when
+the results are fed back — so every single-shot call looks fine and every
+multi-turn tool loop dies, which is all of Module D on Gemini. No other provider
+has anything like it, and nothing in the brief's contract has a place to put it.
+
+The fix is the smallest hole I could cut in the shared contract:
+`ContentBlock.providerMetadata`, a map keyed by provider name holding opaque
+vendor tokens. The Gemini adapter writes `{ google: { thoughtSignature } }` when
+it reads a `functionCall`, and reads it back when it writes one. Two properties
+matter:
+
+- **It is namespaced.** Module B lets a conversation change provider between
+  turns, so a `tool_use` block replayed into Gemini may well have been minted by
+  Anthropic. The adapter looks under `google` and finds nothing, rather than
+  handing a foreign blob to the vendor.
+- **Nothing above the adapter reads it.** The chat service carries it from the
+  stream event onto the persisted assistant message without inspecting it, and it
+  is deliberately not forwarded to the browser.
+
+Tested in `test/google.adapter.test.ts` — both that the signature round-trips, and
+that another vendor's metadata is *not* attached to a Gemini function call.
 
 ---
 
@@ -262,10 +298,32 @@ the user cancelled or hides a real timeout.
 Capabilities are per **model**, not per provider, and assuming otherwise breaks in
 production:
 
-- **`deepseek-reasoner` does not support function calling** while `deepseek-chat`
-  does. Declared as `capabilities.tools: false` in `config/models.json`; the
-  adapter raises `unsupported` before anything is sent, and the chat UI degrades
-  to a tool-free turn with an explanation rather than a vendor 400.
+- **`temperature` is deprecated on Anthropic's newest models but not its older
+  ones.** Claude Sonnet 5 and Opus 5 answer a request carrying `temperature: 0.2`
+  with a 400 — `` `temperature` is deprecated for this model `` — while Haiku 4.5,
+  Sonnet 4.5, Sonnet 4.6 and Opus 4.5 accept the identical request through the
+  *same adapter*. Verified model by model against the live API:
+
+  | Model | `temperature: 0.2` | omitted |
+  |---|---|---|
+  | claude-haiku-4-5 | ok | ok |
+  | claude-sonnet-4-5 | ok | ok |
+  | claude-opus-4-5 | ok | ok |
+  | claude-sonnet-5 | **400** | ok |
+  | claude-opus-5 | **400** | ok |
+
+  This cannot live in the adapter, because the adapter is the same for all five.
+  It is `capabilities.temperature: false` in `config/models.json`, and the gateway
+  strips the parameter when it binds a request to a concrete model — on *every*
+  hop, so a fallback that lands on a stricter model does not resurrect the 400.
+- **`groq/compound-mini` rejects user-defined tools** (`` `tool calling` is not
+  supported with this model ``) because it ships Groq's own built-in ones.
+  Declared as `capabilities.tools: false` in `config/models.json`; the adapter
+  raises `unsupported` before anything is sent, and the chat UI degrades to a
+  tool-free turn with an explanation rather than a vendor 400. DeepSeek's
+  retired `deepseek-reasoner` used to be this example; its replacements both
+  support function calling, which is itself the argument for keeping the flag in
+  config rather than in code.
 - **OpenAI reasoning models** rename `max_tokens` to `max_completion_tokens` and
   **reject a non-default `temperature`** outright (a 400, not a warning).
   Keyed off `capabilities.reasoning` in the adapter.
@@ -285,9 +343,15 @@ production:
   (`RETRIEVAL_QUERY` vs `RETRIEVAL_DOCUMENT`) — queries and documents are embedded
   *differently*, which OpenAI does not do. It also **reports no token usage**, so
   we estimate from characters rather than showing a misleading $0.00.
-- **Cosine scores are not comparable across models.** A relevant query/passage pair
-  scores around 0.35 on `text-embedding-3-small`, around 0.7 on
-  `gemini-embedding-001`, and around 0.15 on our local hashed embedder. This is why
+- **Gemini's embedding models accept `outputDimensionality`**, and the width you
+  ask for is the width you must keep: `gemini-embedding-2` will return 3072, 1536
+  or 768 for the same text. The collection records the width it was built with,
+  because a later call at a different width produces vectors that are silently
+  incomparable with the ones already stored.
+- **Cosine scores are not comparable across models.** Measured here on the same
+  query/passage pair: ~0.73 on `gemini-embedding-2`, ~0.40 on our local hashed
+  embedder. A single global threshold is wrong for at least one of them — at 0.55
+  the local embedder returns nothing; at 0.15 Gemini returns everything. This is why
   the similarity threshold lives on the *model* in `config/models.json` and why
   a collection pins its embedding model at creation: mixing vectors from two
   models produces meaningless similarity with no error anywhere.
@@ -300,34 +364,50 @@ All prices are USD per 1,000,000 tokens and live in `config/models.json` —
 nothing is hardcoded in TypeScript, so refreshing them is a config edit and a
 restart.
 
-**Taken from the vendors' public pricing pages, recorded as
-`pricingCheckedOn: 2025-09-17` in the config. I did not have live provider
-accounts while building this, so these numbers were not re-verified against the
-live pages during the build — treat them as a starting point and confirm before
-using any cost figure for a real decision.** The `pricingSources` block in
-`config/models.json` records the URL for each provider:
+**Every number was read off the vendor's own pricing page on the date recorded as
+`pricingCheckedOn` in `config/models.json` (currently `2026-09-17`).** The
+`pricingSources` block records the URL each provider's figures came from:
 
 | Provider | Source |
 |---|---|
-| Anthropic | <https://www.anthropic.com/pricing#api> |
+| Anthropic | <https://platform.claude.com/docs/en/about-claude/pricing> |
 | Google | <https://ai.google.dev/gemini-api/docs/pricing> |
-| OpenAI | <https://openai.com/api/pricing/> |
-| Groq | <https://groq.com/pricing/> |
+| OpenAI | <https://developers.openai.com/api/docs/pricing> |
+| Groq | <https://console.groq.com/docs/models> |
 | DeepSeek | <https://api-docs.deepseek.com/quick_start/pricing> |
+
+A model catalog is a perishable good, and this one proved it. Between writing the
+adapters and finishing the docs: Gemini's entire 2.5 generation stopped serving
+new API keys (`"This model is no longer available to new users. Please update
+your code to use models/gemini-3.6-flash"`), Groq decommissioned both Llama
+entries, Anthropic retired Opus 4.1 and Haiku 3.5 from the first-party API, and
+DeepSeek replaced `deepseek-chat`/`deepseek-reasoner` wholesale with
+`deepseek-flash`/`deepseek-v4-pro` at different prices and a 1M context. Each of
+those was a `config/models.json` edit with no TypeScript touched, which is the
+strongest argument I have for why the catalog is configuration.
 
 Caveats that a single number per model does not capture, and which a production
 system would need:
 
-- **Gemini 2.5 Pro is tiered** — the rate rises above a 200k-token prompt. We
-  encode the lower tier, so long-context requests are *under*-reported.
+- **Gemini 3.1 Pro is tiered** — input and output both rise above a 200k-token
+  prompt. We encode the lower tier, so long-context requests are *under*-reported.
+- **Gemini 3.8/3.6 Flash carry promotional pricing** that doubles on 2027-01-01.
+  We encode today's rate; the config will be wrong on that date unless refreshed.
 - **Anthropic cache writes cost more than fresh input** (1.25× for a 5-minute TTL,
   2× for an hour). We encode the 5-minute rate; `cacheWritePerMTok` exists for
   exactly this reason.
 - **Batch APIs are ~50% cheaper** on several providers. Not modelled — we make no
   batch calls.
-- **DeepSeek has run off-peak discounts**; there is no time-of-day dimension here.
+- **DeepSeek prices off-peak at roughly half of peak**; there is no time-of-day
+  dimension here, so we encode the peak (higher) rate and over-report off-peak.
 - **Groq's free tier is $0** but rate-limited; we price at the paid rate, so a
-  free-tier reviewer will see costs that were not actually charged.
+  free-tier reviewer will see costs that were not actually charged. The same is
+  true of Gemini's free tier, which additionally caps some models at a handful of
+  requests — `gemini-3.8-flash` returned `RESOURCE_EXHAUSTED` after five calls
+  during testing, which is what the fallback chain is for.
+- **`groq/compound-mini` is billed at its underlying model's rate**, not its own;
+  it is in the catalog because it rejects user-defined tools and is therefore the
+  live case for graceful degradation.
 
 Where a model reports cached tokens but publishes no cached rate (Groq), the
 breakdown is flagged `approximated: true` and billed at the full input rate rather

@@ -50,11 +50,23 @@ stream was therefore aborted before it produced a token, and the upstream reques
 was never even made.
 
 I only caught it because I refused to call streaming "done" without an end-to-end
-run, so I built a mock upstream that speaks the Anthropic wire protocol and drove
-a real turn through the real HTTP layer. The fix is `res.on('close')` guarded by
-`writableFinished`. The same harness then let me prove the *opposite* direction —
-that cancelling the client tears down the provider connection at exactly the token
-the client stopped receiving.
+run: a fixture upstream that speaks the Anthropic wire protocol, driven through
+the real HTTP layer. The fix is `res.on('close')` guarded by `writableFinished`.
+
+The tail of this one is the more useful part. I fixed the SSE transport and moved
+on — and left the identical `req.on('close')` in the three non-SSE routes that
+also do upstream work (document ingest, retrieval search, structured extraction),
+where it had exactly the same effect: structured output returned
+`{"code":"cancelled"}` 100% of the time on every provider, and ingestion failed
+for any real embedding provider. It survived because the local offline embedder
+never checks the signal, so the one path I happened to exercise looked fine.
+
+Two changes came out of that. The abort signal is now one helper
+(`abortOnClientDisconnect`) instead of a pattern people re-type, and the fixture
+upstream became a committed test file — `test/http.app.test.ts` boots the real
+Express app and drives streaming, persistence, tenant isolation and cancellation
+over a real socket. Before that, the entire `src/http/` layer had no tests at all,
+which is precisely why a bug in it could survive being "fixed".
 
 **Lesson I would repeat:** the model is good at code that looks like other code.
 It is not good at runtime behaviour peculiar to one stack, and unit tests that
@@ -98,9 +110,11 @@ from measurement, not from the model.
   never merged the digits; the fix strips separators before tokenizing.
 - **`toGeminiSchema` contained a dead loop** — a `for` over the dropped-keys set
   whose body was `continue`. Harmless, but it was there to make the code *look*
-  like it used the set it declared. I removed it and made the set exported,
-  documented and asserted by a test, so it is executable documentation instead of
-  decoration.
+  like it used the set it declared. I removed it and exported the set — but for a
+  while that was the same mistake wearing a hat: the set was exported and
+  documented as "asserted in the adapter tests" while nothing imported it. It is
+  now genuinely asserted, one `it.each` case per keyword, which is the only thing
+  that makes a comment like that true.
 
 ### 5. Source files written with raw control bytes
 
@@ -122,8 +136,12 @@ perfectly happy. Classic works-in-dev failure. Now there is an explicit
 ### 7. Two silent UI bugs that only a real browser would show
 
 I rebuilt the interface late in the project, and treated "it compiles and the
-tests pass" as meaning nothing. Driving a real headless browser over the DevTools
-protocol found two failures that no amount of reading would have:
+tests pass" as meaning nothing. Driving the running app in a real browser found
+two failures that no amount of reading would have. (That was a debugging session,
+not a committed harness — unlike the fixture upstream in §1, it left no artifact
+in the repo, so what you can actually check here is the two fixes it produced:
+the `overrides` block in the root `package.json` and the explicit `grid-column`
+below 900px in `styles.css`.)
 
 - **A duplicate React.** The page rendered a blank screen in production and
   nothing in the console except a *minified* React error. Unminified, it was "A
@@ -191,8 +209,16 @@ plausible and, in at least three places, quietly broken in ways that unit tests
 agreed with.
 
 What made the difference was not prompting. It was insisting on evidence: an
-end-to-end run against a mock upstream rather than a green unit suite; measuring
-retrieval scores rather than accepting a threshold; scanning the repository for
-control bytes; running the production build instead of the dev server. Every one
-of the corrections above came from checking, and none came from reading the code
-and thinking it looked fine — because it did look fine.
+end-to-end run against a fixture upstream rather than a green unit suite;
+measuring retrieval scores rather than accepting a threshold; scanning the
+repository for control bytes; running the production build instead of the dev
+server; and, once keys were available, calling every model in the catalog rather
+than trusting that the ids still resolved — which is how I found that Gemini 2.5
+had closed to new keys, that Sonnet 5 now rejects `temperature`, and that Gemini 3
+will not accept a replayed tool call without its `thought_signature`.
+
+Every one of the corrections above came from checking, and none came from reading
+the code and thinking it looked fine — because it did look fine. The one I would
+underline is the `req.on('close')` bug: I found it, fixed it, wrote a paragraph
+about it in this file, and still left it in three other files, because I fixed the
+instance instead of the class and had no test at the layer where it lived.

@@ -44,6 +44,8 @@ interface GeminiPart {
   thought?: boolean;
   inlineData?: { mimeType: string; data: string };
   functionCall?: { id?: string; name: string; args?: Record<string, unknown> };
+  /** Gemini 3+ mints this on a functionCall and demands it back verbatim. */
+  thoughtSignature?: string;
   functionResponse?: { id?: string; name: string; response: Record<string, unknown> };
 }
 interface GeminiContent { role?: 'user' | 'model'; parts: GeminiPart[] }
@@ -79,7 +81,8 @@ const GEMINI_TYPES: Record<string, string> = {
 /**
  * Keys Gemini rejects outright (or silently mis-handles) rather than ignoring.
  * `toGeminiSchema` is an allow-list, so these are dropped by construction; the
- * set is kept as executable documentation and is asserted in the adapter tests.
+ * set is kept as executable documentation: every keyword in it is asserted,
+ * one by one, in test/google.adapter.test.ts.
  */
 export const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
   '$schema', '$id', '$ref', '$defs', 'definitions', 'additionalProperties',
@@ -196,6 +199,30 @@ function buildToolNameIndex(messages: Message[]): Map<string, string> {
   return index;
 }
 
+/** Provider namespace for `ContentBlock.providerMetadata`. */
+const META_NS = 'google';
+
+/**
+ * Gemini 3 attaches a `thoughtSignature` to each `functionCall` part and rejects
+ * the follow-up turn if the call is replayed without it:
+ *
+ *   "Function call is missing a thought_signature in functionCall parts. This is
+ *    required for tools to work correctly."
+ *
+ * The signature is opaque and vendor-owned, so it rides in `providerMetadata`
+ * under this adapter's namespace rather than polluting the shared contract.
+ */
+function captureSignature(part: GeminiPart): Pick<ContentBlock, 'providerMetadata'> {
+  return part.thoughtSignature
+    ? { providerMetadata: { [META_NS]: { thoughtSignature: part.thoughtSignature } } }
+    : {};
+}
+
+function replaySignature(b: ContentBlock): { thoughtSignature?: string } {
+  const sig = b.providerMetadata?.[META_NS]?.thoughtSignature;
+  return typeof sig === 'string' && sig ? { thoughtSignature: sig } : {};
+}
+
 export function toGeminiContents(messages: Message[]): GeminiContent[] {
   const toolNames = buildToolNameIndex(messages);
   const out: GeminiContent[] = [];
@@ -219,6 +246,8 @@ export function toGeminiContents(messages: Message[]): GeminiContent[] {
               name: b.name ?? '',
               args: b.input ?? {},
             },
+            // Verbatim, or Gemini 3 refuses the whole turn.
+            ...replaySignature(b),
           });
           break;
         case 'tool_result': {
@@ -412,6 +441,7 @@ class GoogleProvider implements Provider {
           id: part.functionCall.id ?? `gemini_call_${seq++}`,
           name: part.functionCall.name,
           input: part.functionCall.args ?? {},
+          ...captureSignature(part),
         });
       } else if (typeof part.text === 'string' && part.text.length && !part.thought) {
         content.push({ type: 'text', text: part.text });
@@ -494,7 +524,7 @@ class GoogleProvider implements Provider {
             // code path for tool streaming regardless of vendor.
             yield { type: 'tool_use_start', id, name };
             yield { type: 'tool_use_delta', id, partialJson: JSON.stringify(args) };
-            yield { type: 'tool_use_complete', id, name, input: args };
+            yield { type: 'tool_use_complete', id, name, input: args, ...captureSignature(part) };
           } else if (typeof part.text === 'string' && part.text.length) {
             if (part.thought) yield { type: 'reasoning_delta', text: part.text };
             else yield { type: 'text_delta', text: part.text };

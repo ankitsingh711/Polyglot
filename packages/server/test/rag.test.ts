@@ -334,13 +334,13 @@ Below 99.5% monthly uptime the credit is 10%.
     const { collectionId, result } = await inTenant(async () => {
       const collection = createCollectionWithDefaults({
         name: 'Pinned to a dead key',
-        embeddingModel: 'google:gemini-embedding-001',
+        embeddingModel: 'google:gemini-embedding-2',
         chunkSize: 500,
         chunkOverlap: 80,
       });
       // Born pinned to a model that cannot answer: key present, key rejected.
-      expect(collection.embedding_model).toBe('google:gemini-embedding-001');
-      expect(collection.dimensions).toBe(768);
+      expect(collection.embedding_model).toBe('google:gemini-embedding-2');
+      expect(collection.dimensions).toBe(1536);
       return { collectionId: collection.id, result: await ingestFile(collection.id, file('handbook.md', DOC)) };
     });
 
@@ -363,7 +363,7 @@ Below 99.5% monthly uptime the credit is 10%.
     const collectionId = await inTenant(async () => {
       const collection = createCollectionWithDefaults({
         name: 'Pinned and populated',
-        embeddingModel: 'google:gemini-embedding-001',
+        embeddingModel: 'google:gemini-embedding-2',
         chunkSize: 500,
         chunkOverlap: 80,
       });
@@ -372,7 +372,7 @@ Below 99.5% monthly uptime the credit is 10%.
     });
 
     const populated = await inTenant(async () => getCollection(collectionId)!);
-    expect(populated.embedding_model).toBe('google:gemini-embedding-001');
+    expect(populated.embedding_model).toBe('google:gemini-embedding-2');
 
     // The key dies between the two uploads.
     setFetchImpl(geminiFetch('suspended'));
@@ -390,7 +390,7 @@ Below 99.5% monthly uptime the credit is 10%.
     expect((err as ProviderError).provider).toBe('google');
     expect((err as ProviderError).kind).toBe('auth');
     const after = await inTenant(async () => getCollection(collectionId)!);
-    expect(after.embedding_model).toBe('google:gemini-embedding-001');
+    expect(after.embedding_model).toBe('google:gemini-embedding-2');
     expect(after.dimensions).toBe(768);
   });
 });

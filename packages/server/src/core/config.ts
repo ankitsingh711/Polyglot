@@ -48,6 +48,9 @@ const capabilitiesSchema = z.object({
   streaming: z.boolean(),
   reasoning: z.boolean().optional(),
   promptCaching: z.boolean().optional(),
+  // Absent means "accepts temperature". Only models that reject it say so, and
+  // the gateway strips the parameter before dispatch -- see bindToModel().
+  temperature: z.boolean().optional(),
 });
 
 const pricingSchema = z.object({

@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { FetchRecorder, providerFor, resetProviders, collect, textOf, eventsOfType, sseFrames } from './helpers.js';
-import { toGeminiSchema, toGeminiContents, mapGeminiUsage } from '../src/providers/google.provider.js';
+import {
+  toGeminiSchema,
+  toGeminiContents,
+  mapGeminiUsage,
+  GEMINI_UNSUPPORTED_SCHEMA_KEYS,
+} from '../src/providers/google.provider.js';
 import type { Message } from '../src/core/types.js';
 
-const MODEL = 'google:gemini-2.5-flash';
+const MODEL = 'google:gemini-3.8-flash';
 
 describe('Gemini adapter — schema translation', () => {
   it('uppercases types and drops the keywords Gemini rejects', () => {
@@ -29,6 +34,21 @@ describe('Gemini adapter — schema translation', () => {
     expect(props.units.enum).toEqual(['c', 'f']);
     expect(schema.required).toEqual(['city']);
     expect(schema.propertyOrdering).toEqual(['city', 'days', 'units']);
+  });
+
+  it.each([...GEMINI_UNSUPPORTED_SCHEMA_KEYS])('drops the unsupported keyword %s', (keyword) => {
+    // The set documents what Gemini rejects rather than ignores. Asserting it
+    // keyword by keyword is what keeps it executable documentation instead of a
+    // comment that drifts away from `toGeminiSchema`'s allow-list.
+    const schema = toGeminiSchema({
+      type: 'object',
+      properties: { city: { type: 'string', [keyword]: 'x' } },
+      [keyword]: 'x',
+    })!;
+
+    expect(schema).not.toHaveProperty(keyword);
+    expect(schema.properties as Record<string, any>).toBeDefined();
+    expect((schema.properties as Record<string, any>).city).not.toHaveProperty(keyword);
   });
 
   it('converts a nullable union type into type + nullable', () => {
@@ -73,6 +93,58 @@ describe('Gemini adapter — message translation', () => {
     expect(response.response).toEqual({ result: '{"c":3}' });
   });
 
+  it('carries a Gemini 3 thought_signature back out and in again', () => {
+    // Regression. Gemini 3 mints a `thoughtSignature` on every functionCall part
+    // and rejects the follow-up turn without it:
+    //   "Function call is missing a thought_signature in functionCall parts."
+    // Dropping it is invisible until a model actually asks for a tool, and then
+    // the SECOND leg of every multi-turn loop 400s -- i.e. all of Module D on
+    // Gemini. Verified live before and after the fix.
+    const messages: Message[] = [
+      { role: 'user', content: [{ type: 'text', text: 'weather?' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu_1',
+            name: 'get_weather',
+            input: { location: 'Oslo' },
+            providerMetadata: { google: { thoughtSignature: 'EosDCogDARFNMg9XmRzt' } },
+          },
+        ],
+      },
+      { role: 'tool', content: [{ type: 'tool_result', toolUseId: 'tu_1', content: '{"c":3}' }] },
+    ];
+
+    const part = toGeminiContents(messages)[1]!.parts[0]!;
+    expect(part.functionCall!.name).toBe('get_weather');
+    expect(part.thoughtSignature).toBe('EosDCogDARFNMg9XmRzt');
+  });
+
+  it("does not attach another vendor's metadata to a Gemini function call", () => {
+    // A conversation may switch provider between turns (Module B), so a tool_use
+    // block replayed into Gemini can carry metadata Anthropic minted. Namespacing
+    // is what stops it being handed to the wrong vendor.
+    const part = toGeminiContents([
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tu_2',
+            name: 'calculator',
+            input: {},
+            providerMetadata: { anthropic: { somethingElse: 'not-a-gemini-signature' } },
+          },
+        ],
+      },
+    ])[0]!.parts[0]!;
+
+    expect(part.functionCall!.name).toBe('calculator');
+    expect(part.thoughtSignature).toBeUndefined();
+  });
+
   it('flags a failed tool result in-band, because Gemini has no is_error field', () => {
     const contents = toGeminiContents([
       { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'calculator', input: {} }] },
@@ -90,7 +162,7 @@ describe('Gemini adapter — message translation', () => {
 
     await provider.complete({ model: MODEL, system: 'Be terse.', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] });
 
-    expect(recorder.last.url).toContain('/v1beta/models/gemini-2.5-flash:generateContent');
+    expect(recorder.last.url).toContain('/v1beta/models/gemini-3.8-flash:generateContent');
     expect(recorder.last.body.systemInstruction).toEqual({ parts: [{ text: 'Be terse.' }] });
     // Key in a header, never in the query string.
     expect(recorder.last.headers['x-goog-api-key']).toBe('test-gemini-key');
@@ -245,7 +317,7 @@ describe('Gemini adapter — embeddings', () => {
     const recorder = new FetchRecorder().json({ embeddings: [{ values: [0.1, 0.2] }, { values: [0.3, 0.4] }] });
     const provider = await providerFor('google', recorder);
 
-    const res = await provider.embed!({ texts: ['a', 'b'], model: 'google:gemini-embedding-001', taskType: 'query' });
+    const res = await provider.embed!({ texts: ['a', 'b'], model: 'google:gemini-embedding-2', taskType: 'query' });
 
     expect(recorder.last.url).toContain(':batchEmbedContents');
     expect(recorder.last.body.requests[0].taskType).toBe('RETRIEVAL_QUERY');
@@ -256,7 +328,7 @@ describe('Gemini adapter — embeddings', () => {
     const recorder = new FetchRecorder().json({ embeddings: [{ values: [0.1] }] });
     const provider = await providerFor('google', recorder);
     await expect(
-      provider.embed!({ texts: ['a', 'b'], model: 'google:gemini-embedding-001' }),
+      provider.embed!({ texts: ['a', 'b'], model: 'google:gemini-embedding-2' }),
     ).rejects.toMatchObject({ kind: 'server_error' });
   });
 });

@@ -317,7 +317,13 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
     working = fitted.messages;
 
     const assistantBlocks: ContentBlock[] = [];
-    const pendingToolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+    const pendingToolUses: Array<{
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      /** Opaque vendor continuity tokens; replayed verbatim, never inspected here. */
+      providerMetadata?: Record<string, Record<string, unknown>>;
+    }> = [];
     let iterationText = '';
     let iterationReasoning = '';
     let ttftMs: number | null = null;
@@ -369,7 +375,14 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
           yield { type: 'tool_args_delta', id: event.id, partialJson: event.partialJson };
           break;
         case 'tool_use_complete':
-          pendingToolUses.push({ id: event.id, name: event.name, input: event.input });
+          pendingToolUses.push({
+            id: event.id,
+            name: event.name,
+            input: event.input,
+            ...(event.providerMetadata ? { providerMetadata: event.providerMetadata } : {}),
+          });
+          // The metadata is deliberately NOT surfaced to the browser: it is a
+          // vendor credential-ish blob the UI has no use for.
           yield { type: 'tool_call', id: event.id, name: event.name, input: event.input };
           break;
         case 'usage':
@@ -419,7 +432,13 @@ export async function* sendMessage(input: SendMessageInput): AsyncGenerator<Chat
 
     if (iterationText) assistantBlocks.push({ type: 'text', text: iterationText });
     for (const use of pendingToolUses) {
-      assistantBlocks.push({ type: 'tool_use', id: use.id, name: use.name, input: use.input });
+      assistantBlocks.push({
+        type: 'tool_use',
+        id: use.id,
+        name: use.name,
+        input: use.input,
+        ...(use.providerMetadata ? { providerMetadata: use.providerMetadata } : {}),
+      });
     }
 
     finalText += iterationText;

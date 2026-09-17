@@ -214,11 +214,17 @@ describe('cost computation', () => {
   });
 
   it('falls back to the full input rate when no cached price is published', () => {
-    const cost = computeCost('groq:llama-3.1-8b-instant', {
+    // Groq reports cached tokens but publishes no cached rate, so every input
+    // token bills at the full rate and the row is flagged `approximated` rather
+    // than quietly under-reporting. The expected figure is read from config on
+    // purpose: hardcoding it here would make a routine price refresh look like a
+    // regression in the cost engine.
+    const rate = loadConfig().models.models['groq:gpt-oss-20b']!.pricing.inputPerMTok;
+    const cost = computeCost('groq:gpt-oss-20b', {
       inputTokens: 1_000_000, outputTokens: 0, cachedInputTokens: 500_000,
     });
     expect(cost.approximated).toBe(true);
-    expect(cost.totalUsd).toBeCloseTo(0.05, 6);
+    expect(cost.totalUsd).toBeCloseTo(rate, 6);
   });
 
   it('returns zero for an unknown model instead of throwing inside metrics', () => {

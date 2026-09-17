@@ -107,7 +107,7 @@ describe('OpenAI adapter', () => {
   it('asks for usage on streamed responses, which OpenAI otherwise omits entirely', async () => {
     const recorder = new FetchRecorder().sse(sseFrames([{ data: '[DONE]' }]));
     const provider = await providerFor('openai', recorder);
-    await collect(provider.stream({ model: 'openai:gpt-4o-mini', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }));
+    await collect(provider.stream({ model: 'openai:gpt-4.1-mini', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }));
 
     expect(recorder.last.body.stream_options).toEqual({ include_usage: true });
   });
@@ -127,7 +127,7 @@ describe('OpenAI adapter', () => {
     const provider = await providerFor('openai', recorder);
     const events = await collect(
       provider.stream({
-        model: 'openai:gpt-4o-mini',
+        model: 'openai:gpt-4.1-mini',
         messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
         tools: [{ name: 'calculator', description: 'math', parameters: { type: 'object', properties: { expression: { type: 'string' } } } }],
       }),
@@ -154,7 +154,7 @@ describe('OpenAI adapter', () => {
     const provider = await providerFor('openai', recorder);
     const events = await collect(
       provider.stream({
-        model: 'openai:gpt-4o-mini',
+        model: 'openai:gpt-4.1-mini',
         messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
         tools: [
           { name: 'calculator', description: 'm', parameters: { type: 'object', properties: { expression: { type: 'string' } } } },
@@ -176,7 +176,7 @@ describe('OpenAI adapter', () => {
     });
     const provider = await providerFor('openai', recorder);
     const res = await provider.complete({
-      model: 'openai:gpt-4o-mini',
+      model: 'openai:gpt-4.1-mini',
       messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
       responseFormat: { type: 'json_schema', name: 'invoice', schema: { type: 'object', properties: { total: { type: 'number' } } } },
     });
@@ -194,7 +194,7 @@ describe('OpenAI adapter', () => {
     );
     const provider = await providerFor('openai', recorder);
     const err = await provider
-      .complete({ model: 'openai:gpt-4o-mini', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] })
+      .complete({ model: 'openai:gpt-4.1-mini', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] })
       .catch((e) => e);
 
     expect(err.kind).toBe('auth');
@@ -228,7 +228,7 @@ describe('Groq adapter', () => {
     );
     const provider = await providerFor('groq', recorder);
     const events = await collect(
-      provider.stream({ model: 'groq:llama-3.1-8b-instant', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }),
+      provider.stream({ model: 'groq:gpt-oss-20b', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }),
     );
     expect(textOf(events)).toBe('fast');
     expect(eventsOfType(events, 'usage')[0]!.usage).toMatchObject({ inputTokens: 11, outputTokens: 2 });
@@ -253,7 +253,7 @@ describe('Groq adapter', () => {
     );
     const provider = await providerFor('groq', recorder);
     const err = await provider
-      .complete({ model: 'groq:llama-3.1-8b-instant', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] })
+      .complete({ model: 'groq:gpt-oss-20b', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] })
       .catch((e) => e);
     expect(err.kind).toBe('rate_limit');
     expect(err.retryAfterMs).toBe(2500);
@@ -273,7 +273,7 @@ describe('DeepSeek adapter', () => {
     );
     const provider = await providerFor('deepseek', recorder);
     const events = await collect(
-      provider.stream({ model: 'deepseek:deepseek-chat', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }),
+      provider.stream({ model: 'deepseek:deepseek-flash', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }),
     );
 
     expect(textOf(events)).toBe('The answer is 4.');
@@ -284,7 +284,7 @@ describe('DeepSeek adapter', () => {
     const recorder = new FetchRecorder().sse(sseFrames([{ data: '[DONE]' }]));
     const provider = await providerFor('deepseek', recorder);
     await collect(
-      provider.stream({ model: 'deepseek:deepseek-chat', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }),
+      provider.stream({ model: 'deepseek:deepseek-flash', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }),
     );
     expect(recorder.last.body.stream_options).toBeUndefined();
   });
@@ -295,7 +295,7 @@ describe('DeepSeek adapter', () => {
     });
     const provider = await providerFor('deepseek', recorder);
     const res = await provider.complete({
-      model: 'deepseek:deepseek-chat',
+      model: 'deepseek:deepseek-flash',
       messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
       responseFormat: { type: 'json_schema', name: 'x', schema: { type: 'object', properties: { total: { type: 'number' } } } },
     });
@@ -304,13 +304,18 @@ describe('DeepSeek adapter', () => {
     expect(res.structuredMode).toBe('prompt_fallback');
   });
 
-  it('refuses tools on deepseek-reasoner rather than sending a request that will 400', async () => {
+  it('refuses tools on a model whose config says it has none, without calling upstream', async () => {
+    // groq/compound-mini is an agentic system with Groq's OWN built-in tools and
+    // it rejects user-defined function calling ("`tool calling` is not supported
+    // with this model", verified live). The capability flag has to catch that
+    // before the request leaves, otherwise every such turn costs a round trip to
+    // learn something config already knew.
     const recorder = new FetchRecorder();
-    const provider = await providerFor('deepseek', recorder);
+    const provider = await providerFor('groq', recorder);
 
     await expect(
       provider.complete({
-        model: 'deepseek:deepseek-reasoner',
+        model: 'groq:compound-mini',
         messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }],
         tools: [{ name: 'calculator', description: 'm', parameters: { type: 'object', properties: { e: { type: 'string' } } } }],
       }),

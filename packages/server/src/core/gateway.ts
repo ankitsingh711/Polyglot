@@ -126,6 +126,24 @@ function isContentEvent(e: StreamEvent): boolean {
  * surfaced rather than papered over. This is why the loop buffers nothing and
  * flips `committed` on the first content event.
  */
+/**
+ * Bind a provider-agnostic request to ONE concrete model.
+ *
+ * This is the only place a request is specialised, and it runs on every hop --
+ * which matters, because a fallback can land on a model whose capabilities
+ * differ from the one the caller asked for. Sending `temperature` to a model
+ * that has deprecated it is a hard 400 on Anthropic, so the chain would turn a
+ * recoverable outage into a dead end if the parameter were carried over blindly.
+ *
+ * Capabilities are read from config, never inferred from the model id.
+ */
+function bindToModel(req: CompletionRequest, modelId: string): CompletionRequest {
+  const caps = getModelEntry(modelId).capabilities;
+  const bound: CompletionRequest = { ...req, model: modelId };
+  if (caps.temperature === false) delete bound.temperature;
+  return bound;
+}
+
 export async function* streamCompletion(
   req: CompletionRequest,
   opts: GatewayCallOptions,
@@ -154,6 +172,40 @@ export async function* streamCompletion(
       let toolCalls = 0;
       let streamError: ProviderError | undefined;
 
+      /*
+       * Exactly one usage row per attempt, whatever happens to this generator.
+       *
+       * A cancelled turn used to land in the metrics panel as a clean `stop`
+       * with no error kind -- indistinguishable from a turn that ran to
+       * completion, which is the one thing an observability panel must never do.
+       * Two things make that easy to get wrong: the caller abandoning the
+       * generator (`break` out of `for await`) unwinds through `return()`, which
+       * runs `finally` but NOT the code after the loop; and a provider that
+       * simply stops yielding when its socket dies looks, from here, exactly
+       * like a provider that finished.
+       */
+      let recorded = false;
+      const record = (over: { finishReason?: FinishReason; errorKind?: ErrorKind | null }) => {
+        if (recorded) return;
+        recorded = true;
+        recordUsage({
+          requestId,
+          conversationId: opts.conversationId ?? null,
+          kind: opts.kind,
+          provider: entry.provider,
+          modelId,
+          startedAt,
+          ttftMs,
+          latencyMs: performance.now() - t0,
+          usage,
+          finishReason: over.finishReason ?? finishReason,
+          retryCount,
+          fallbackFrom: hop > 0 ? requested : null,
+          errorKind: over.errorKind ?? null,
+          toolCallCount: toolCalls + (opts.toolCallCount ?? 0),
+        });
+      };
+
       try {
         const { provider } = providerForModel(modelId);
         yield {
@@ -164,7 +216,7 @@ export async function* streamCompletion(
           ...(hop > 0 ? { fallbackFrom: requested } : {}),
         };
 
-        const iterable = provider.stream({ ...req, model: modelId });
+        const iterable = provider.stream(bindToModel(req, modelId));
 
         for await (const event of iterable) {
           if (event.type === 'error') {
@@ -186,22 +238,12 @@ export async function* streamCompletion(
 
         if (streamError && !committed) throw streamError;
 
-        const latencyMs = performance.now() - t0;
-        recordUsage({
-          requestId,
-          conversationId: opts.conversationId ?? null,
-          kind: opts.kind,
-          provider: entry.provider,
-          modelId,
-          startedAt,
-          ttftMs,
-          latencyMs,
-          usage,
-          finishReason: streamError ? 'error' : finishReason,
-          retryCount,
-          fallbackFrom: hop > 0 ? requested : null,
-          errorKind: streamError?.kind ?? null,
-          toolCallCount: toolCalls + (opts.toolCallCount ?? 0),
+        // The caller's signal firing mid-stream is a cancellation even when the
+        // adapter returned quietly rather than throwing.
+        const cancelled = !streamError && req.signal?.aborted === true;
+        record({
+          finishReason: streamError || cancelled ? 'error' : finishReason,
+          errorKind: streamError?.kind ?? (cancelled ? 'cancelled' : null),
         });
 
         if (streamError) return; // hot failure already surfaced
@@ -215,21 +257,7 @@ export async function* streamCompletion(
         });
         lastError = perr;
 
-        recordUsage({
-          requestId,
-          conversationId: opts.conversationId ?? null,
-          kind: opts.kind,
-          provider: entry.provider,
-          modelId,
-          startedAt,
-          ttftMs,
-          latencyMs: performance.now() - t0,
-          usage,
-          finishReason: 'error',
-          retryCount,
-          fallbackFrom: hop > 0 ? requested : null,
-          errorKind: perr.kind,
-        });
+        record({ finishReason: 'error', errorKind: perr.kind });
 
         if (perr.kind === 'cancelled') return;
 
@@ -253,6 +281,11 @@ export async function* streamCompletion(
           yield { type: 'fallback', from: modelId, to: nextModel, kind: perr.kind, message: scrubSecrets(perr.message) };
         }
         break; // exit attempt loop → next candidate (or out of candidates)
+      } finally {
+        // Reached when the CALLER abandons this generator: `break` inside their
+        // `for await` unwinds through `return()`, so neither branch above ran.
+        // The turn still happened and still cost money, so it still gets a row.
+        record({ finishReason: 'error', errorKind: 'cancelled' });
       }
     }
 
@@ -299,7 +332,7 @@ export async function complete(req: CompletionRequest, opts: GatewayCallOptions)
       const t0 = performance.now();
       try {
         const { provider } = providerForModel(modelId);
-        const res = await provider.complete({ ...req, model: modelId });
+        const res = await provider.complete(bindToModel(req, modelId));
         const latencyMs = performance.now() - t0;
 
         recordUsage({

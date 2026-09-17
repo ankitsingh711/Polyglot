@@ -35,6 +35,25 @@ export interface ContentBlock {
   toolUseId?: string;
   content?: string;
   isError?: boolean;
+
+  /**
+   * Opaque continuity tokens a vendor MINTED and requires back verbatim on the
+   * next turn. Namespaced by provider name; only the adapter that wrote an entry
+   * ever reads it, and nothing outside an adapter may interpret the contents.
+   *
+   * This exists because the brief's contract has no home for it and Gemini 3
+   * hard-fails without it: a `functionCall` part carries a `thoughtSignature`,
+   * and replaying that tool call without it returns
+   *   "Function call is missing a thought_signature in functionCall parts."
+   * so the second leg of EVERY multi-turn tool loop 400s. Dropping the field on
+   * the way in is invisible until the model asks for a tool.
+   *
+   * It is namespaced rather than a bare blob because a conversation can switch
+   * provider between turns (Module B) -- Anthropic must not be handed Gemini's
+   * signature, and the adapter reading `providerMetadata.google` simply finds
+   * nothing when the block came from somewhere else.
+   */
+  providerMetadata?: Record<string, Record<string, unknown>>;
 }
 
 export interface Message {
@@ -126,7 +145,14 @@ export type StreamEvent =
   | { type: 'reasoning_delta'; text: string }
   | { type: 'tool_use_start'; id: string; name: string }
   | { type: 'tool_use_delta'; id: string; partialJson: string }
-  | { type: 'tool_use_complete'; id: string; name: string; input: Record<string, unknown> }
+  | {
+      type: 'tool_use_complete';
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      /** Vendor continuity tokens to replay on the next turn. See ContentBlock. */
+      providerMetadata?: Record<string, Record<string, unknown>>;
+    }
   | { type: 'usage'; usage: Usage }
   | { type: 'done'; finishReason: FinishReason }
   | { type: 'error'; error: NormalizedProviderError };
@@ -213,6 +239,18 @@ export interface ModelCapabilities {
   reasoning?: boolean;
   /** Provider-side prompt caching is available for this model. */
   promptCaching?: boolean;
+  /**
+   * Whether the model accepts a `temperature` (and other sampling knobs).
+   * Absent means yes -- only models that REJECT it need to say so.
+   *
+   * This is a capability, not a vendor quirk, which is why it lives in config
+   * next to `contextWindow` rather than in an adapter: Anthropic's Sonnet 5 and
+   * Opus 5 hard-400 on `temperature` ("`temperature` is deprecated for this
+   * model") while Haiku 4.5, Sonnet 4.5 and Opus 4.5 on the SAME adapter accept
+   * it, and OpenAI's reasoning models behave the same way. Encoding it per model
+   * is the only thing that stays correct as vendors ship new generations.
+   */
+  temperature?: boolean;
 }
 
 export interface ModelPricing {

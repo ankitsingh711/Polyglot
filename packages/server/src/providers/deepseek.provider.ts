@@ -16,9 +16,12 @@ import type { ProviderInit } from '../core/types.js';
  *  3. Only `response_format: {type:'json_object'}` — there is no native JSON
  *     Schema, so structured output degrades to prompt + validate + retry.
  *
- * `deepseek-reasoner` additionally does not support function calling at all;
- * that is declared as `capabilities.tools: false` in config/models.json and the
- * shared base turns it into an `unsupported` ProviderError the UI can explain.
+ * Lineup note: DeepSeek retired `deepseek-chat`/`deepseek-reasoner` in favour of
+ * `deepseek-flash` and `deepseek-v4-pro`, both of which DO support function
+ * calling, so the tools-unsupported path is now exercised by `groq:compound-mini`
+ * instead. The mechanism is unchanged and lives in config, not here: a model with
+ * `capabilities.tools: false` is turned into an `unsupported` ProviderError by the
+ * shared base before any request leaves the process.
  */
 class DeepSeekProvider extends OpenAICompatibleProvider {
   constructor(init: ProviderInit) {

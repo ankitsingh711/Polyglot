@@ -226,11 +226,18 @@ describe('cost caps', () => {
   beforeEach(() => resetProviders());
 
   it('refuses a request whose worst case exceeds the per-request cap', async () => {
-    // opus-4.1 at $75/MTok output: 30k output tokens is ~$2.25, over the $1 cap.
+    // Budgeting happens BEFORE the upstream call, priced at the worst case
+    // (every one of maxTokens billed as output). Both the cap and the rate come
+    // from config, so this stays a test of the guard rather than of today's
+    // price list: ask for 1.5x the tokens the cap can pay for.
+    const model = 'anthropic:claude-opus-4-5';
+    const cfg = loadConfig();
+    const capUsd = cfg.app.limits.maxCostPerRequestUsd;
+    const outputPerMTok = cfg.models.models[model]!.pricing.outputPerMTok;
+    const maxTokens = Math.ceil((capUsd / outputPerMTok) * 1_000_000 * 1.5);
+
     await expect(
-      inTenant(() =>
-        complete({ model: 'anthropic:claude-opus-4-1', messages: [message], maxTokens: 30_000 }, { kind: 'chat' }),
-      ),
+      inTenant(() => complete({ model, messages: [message], maxTokens }, { kind: 'chat' })),
     ).rejects.toMatchObject({ code: 'request_cost_cap' });
   });
 });

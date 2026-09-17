@@ -1,36 +1,15 @@
 {
   "$schemaVersion": 1,
-  "pricingCheckedOn": "2025-09-17",
+  "pricingCheckedOn": "2026-09-17",
   "pricingSources": {
-    "anthropic": "https://www.anthropic.com/pricing#api",
+    "anthropic": "https://platform.claude.com/docs/en/about-claude/pricing",
     "google": "https://ai.google.dev/gemini-api/docs/pricing",
-    "openai": "https://openai.com/api/pricing/",
-    "groq": "https://groq.com/pricing/",
+    "openai": "https://developers.openai.com/api/docs/pricing",
+    "groq": "https://console.groq.com/docs/models",
     "deepseek": "https://api-docs.deepseek.com/quick_start/pricing"
   },
   "_comment": "All prices are USD per 1,000,000 tokens. See docs/PROVIDER_NOTES.md for how each number was sourced and the caveats (tiered pricing, batch discounts, cache-write surcharges).",
   "models": {
-    "anthropic:claude-sonnet-4-5": {
-      "displayName": "Claude Sonnet 4.5",
-      "provider": "anthropic",
-      "providerModelId": "claude-sonnet-4-5",
-      "kind": "chat",
-      "contextWindow": 200000,
-      "maxOutputTokens": 64000,
-      "capabilities": {
-        "tools": true,
-        "vision": true,
-        "jsonSchema": true,
-        "streaming": true,
-        "promptCaching": true
-      },
-      "pricing": {
-        "inputPerMTok": 3,
-        "outputPerMTok": 15,
-        "cachedInputPerMTok": 0.3,
-        "cacheWritePerMTok": 3.75
-      }
-    },
     "anthropic:claude-haiku-4-5": {
       "displayName": "Claude Haiku 4.5",
       "provider": "anthropic",
@@ -46,19 +25,41 @@
         "promptCaching": true
       },
       "pricing": {
-        "inputPerMTok": 1,
-        "outputPerMTok": 5,
+        "inputPerMTok": 1.0,
+        "outputPerMTok": 5.0,
         "cachedInputPerMTok": 0.1,
         "cacheWritePerMTok": 1.25
       }
     },
-    "anthropic:claude-opus-4-1": {
-      "displayName": "Claude Opus 4.1",
+    "anthropic:claude-sonnet-5": {
+      "displayName": "Claude Sonnet 5",
       "provider": "anthropic",
-      "providerModelId": "claude-opus-4-1",
+      "providerModelId": "claude-sonnet-5",
       "kind": "chat",
       "contextWindow": 200000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 64000,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "jsonSchema": true,
+        "streaming": true,
+        "promptCaching": true,
+        "temperature": false
+      },
+      "pricing": {
+        "inputPerMTok": 2.0,
+        "outputPerMTok": 10.0,
+        "cachedInputPerMTok": 0.2,
+        "cacheWritePerMTok": 2.5
+      }
+    },
+    "anthropic:claude-sonnet-4-5": {
+      "displayName": "Claude Sonnet 4.5",
+      "provider": "anthropic",
+      "providerModelId": "claude-sonnet-4-5",
+      "kind": "chat",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
       "capabilities": {
         "tools": true,
         "vision": true,
@@ -67,19 +68,19 @@
         "promptCaching": true
       },
       "pricing": {
-        "inputPerMTok": 15,
-        "outputPerMTok": 75,
-        "cachedInputPerMTok": 1.5,
-        "cacheWritePerMTok": 18.75
+        "inputPerMTok": 3.0,
+        "outputPerMTok": 15.0,
+        "cachedInputPerMTok": 0.3,
+        "cacheWritePerMTok": 3.75
       }
     },
-    "anthropic:claude-3-5-haiku": {
-      "displayName": "Claude Haiku 3.5",
+    "anthropic:claude-opus-4-5": {
+      "displayName": "Claude Opus 4.5",
       "provider": "anthropic",
-      "providerModelId": "claude-3-5-haiku-latest",
+      "providerModelId": "claude-opus-4-5",
       "kind": "chat",
       "contextWindow": 200000,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 64000,
       "capabilities": {
         "tools": true,
         "vision": true,
@@ -88,16 +89,16 @@
         "promptCaching": true
       },
       "pricing": {
-        "inputPerMTok": 0.8,
-        "outputPerMTok": 4,
-        "cachedInputPerMTok": 0.08,
-        "cacheWritePerMTok": 1
+        "inputPerMTok": 5.0,
+        "outputPerMTok": 25.0,
+        "cachedInputPerMTok": 0.5,
+        "cacheWritePerMTok": 6.25
       }
     },
-    "google:gemini-2.5-pro": {
-      "displayName": "Gemini 2.5 Pro",
+    "google:gemini-3.8-flash": {
+      "displayName": "Gemini 3.8 Flash",
       "provider": "google",
-      "providerModelId": "gemini-2.5-pro",
+      "providerModelId": "gemini-3.8-flash",
       "kind": "chat",
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -106,19 +107,19 @@
         "vision": true,
         "jsonSchema": true,
         "streaming": true,
-        "reasoning": true,
-        "promptCaching": true
+        "promptCaching": true,
+        "reasoning": true
       },
       "pricing": {
-        "inputPerMTok": 1.25,
-        "outputPerMTok": 10,
-        "cachedInputPerMTok": 0.31
+        "inputPerMTok": 0.75,
+        "outputPerMTok": 3.75,
+        "cachedInputPerMTok": 0.075
       }
     },
-    "google:gemini-2.5-flash": {
-      "displayName": "Gemini 2.5 Flash",
+    "google:gemini-3.5-flash-lite": {
+      "displayName": "Gemini 3.5 Flash-Lite",
       "provider": "google",
-      "providerModelId": "gemini-2.5-flash",
+      "providerModelId": "gemini-3.5-flash-lite",
       "kind": "chat",
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -127,19 +128,18 @@
         "vision": true,
         "jsonSchema": true,
         "streaming": true,
-        "reasoning": true,
         "promptCaching": true
       },
       "pricing": {
         "inputPerMTok": 0.3,
         "outputPerMTok": 2.5,
-        "cachedInputPerMTok": 0.075
+        "cachedInputPerMTok": 0.03
       }
     },
-    "google:gemini-2.5-flash-lite": {
-      "displayName": "Gemini 2.5 Flash-Lite",
+    "google:gemini-3.1-flash-lite": {
+      "displayName": "Gemini 3.1 Flash-Lite",
       "provider": "google",
-      "providerModelId": "gemini-2.5-flash-lite",
+      "providerModelId": "gemini-3.1-flash-lite",
       "kind": "chat",
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
@@ -151,18 +151,39 @@
         "promptCaching": true
       },
       "pricing": {
-        "inputPerMTok": 0.1,
-        "outputPerMTok": 0.4,
+        "inputPerMTok": 0.25,
+        "outputPerMTok": 1.5,
         "cachedInputPerMTok": 0.025
       }
     },
-    "google:gemini-embedding-001": {
-      "displayName": "Gemini Embedding 001",
+    "google:gemini-3.1-pro-preview": {
+      "displayName": "Gemini 3.1 Pro (preview)",
       "provider": "google",
-      "providerModelId": "gemini-embedding-001",
+      "providerModelId": "gemini-3.1-pro-preview",
+      "kind": "chat",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "jsonSchema": true,
+        "streaming": true,
+        "promptCaching": true,
+        "reasoning": true
+      },
+      "pricing": {
+        "inputPerMTok": 2.0,
+        "outputPerMTok": 12.0,
+        "cachedInputPerMTok": 0.2
+      }
+    },
+    "google:gemini-embedding-2": {
+      "displayName": "Gemini Embedding 2",
+      "provider": "google",
+      "providerModelId": "gemini-embedding-2",
       "kind": "embedding",
-      "contextWindow": 2048,
-      "dimensions": 768,
+      "contextWindow": 8192,
+      "dimensions": 1536,
       "retrieval": {
         "defaultSimilarityThreshold": 0.55
       },
@@ -173,28 +194,125 @@
         "streaming": false
       },
       "pricing": {
-        "inputPerMTok": 0.15,
+        "inputPerMTok": 0.2,
         "outputPerMTok": 0
       }
     },
-    "openai:gpt-4.1": {
-      "displayName": "GPT-4.1",
-      "provider": "openai",
-      "providerModelId": "gpt-4.1",
+    "groq:gpt-oss-120b": {
+      "displayName": "GPT-OSS 120B (Groq)",
+      "provider": "groq",
+      "providerModelId": "openai/gpt-oss-120b",
       "kind": "chat",
-      "contextWindow": 1047576,
+      "contextWindow": 131072,
       "maxOutputTokens": 32768,
+      "capabilities": {
+        "tools": true,
+        "vision": false,
+        "jsonSchema": true,
+        "streaming": true,
+        "reasoning": true
+      },
+      "pricing": {
+        "inputPerMTok": 0.15,
+        "outputPerMTok": 0.6
+      }
+    },
+    "groq:gpt-oss-20b": {
+      "displayName": "GPT-OSS 20B (Groq)",
+      "provider": "groq",
+      "providerModelId": "openai/gpt-oss-20b",
+      "kind": "chat",
+      "contextWindow": 131072,
+      "maxOutputTokens": 32768,
+      "capabilities": {
+        "tools": true,
+        "vision": false,
+        "jsonSchema": true,
+        "streaming": true,
+        "reasoning": true
+      },
+      "pricing": {
+        "inputPerMTok": 0.075,
+        "outputPerMTok": 0.3
+      }
+    },
+    "groq:qwen3.8-27b": {
+      "displayName": "Qwen3.8 27B (Groq)",
+      "provider": "groq",
+      "providerModelId": "qwen/qwen3.8-27b",
+      "kind": "chat",
+      "contextWindow": 131042,
+      "maxOutputTokens": 32768,
+      "capabilities": {
+        "tools": true,
+        "vision": false,
+        "jsonSchema": true,
+        "streaming": true
+      },
+      "pricing": {
+        "inputPerMTok": 0.8,
+        "outputPerMTok": 4.0
+      }
+    },
+    "groq:compound-mini": {
+      "displayName": "Compound Mini (Groq)",
+      "provider": "groq",
+      "providerModelId": "groq/compound-mini",
+      "kind": "chat",
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "_comment": "An agentic system with Groq's own built-in tools; it rejects USER-defined function calling outright (\"`tool calling` is not supported with this model\"). Kept in the catalog on purpose: it is the live case that exercises graceful tool degradation. Billed at the underlying model's rate.",
+      "capabilities": {
+        "tools": false,
+        "vision": false,
+        "jsonSchema": false,
+        "streaming": true
+      },
+      "pricing": {
+        "inputPerMTok": 0.15,
+        "outputPerMTok": 0.6
+      }
+    },
+    "openai:gpt-5.1": {
+      "displayName": "GPT-5.1",
+      "provider": "openai",
+      "providerModelId": "gpt-5.1",
+      "kind": "chat",
+      "contextWindow": 400000,
+      "maxOutputTokens": 128000,
       "capabilities": {
         "tools": true,
         "vision": true,
         "jsonSchema": true,
         "streaming": true,
-        "promptCaching": true
+        "temperature": false,
+        "reasoning": true
       },
       "pricing": {
-        "inputPerMTok": 2,
-        "outputPerMTok": 8,
-        "cachedInputPerMTok": 0.5
+        "inputPerMTok": 1.25,
+        "outputPerMTok": 10.0,
+        "cachedInputPerMTok": 0.125
+      }
+    },
+    "openai:gpt-5-mini": {
+      "displayName": "GPT-5 mini",
+      "provider": "openai",
+      "providerModelId": "gpt-5-mini",
+      "kind": "chat",
+      "contextWindow": 400000,
+      "maxOutputTokens": 128000,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "jsonSchema": true,
+        "streaming": true,
+        "temperature": false,
+        "reasoning": true
+      },
+      "pricing": {
+        "inputPerMTok": 0.25,
+        "outputPerMTok": 2.0,
+        "cachedInputPerMTok": 0.025
       }
     },
     "openai:gpt-4.1-mini": {
@@ -208,8 +326,7 @@
         "tools": true,
         "vision": true,
         "jsonSchema": true,
-        "streaming": true,
-        "promptCaching": true
+        "streaming": true
       },
       "pricing": {
         "inputPerMTok": 0.4,
@@ -217,28 +334,8 @@
         "cachedInputPerMTok": 0.1
       }
     },
-    "openai:gpt-4o-mini": {
-      "displayName": "GPT-4o mini",
-      "provider": "openai",
-      "providerModelId": "gpt-4o-mini",
-      "kind": "chat",
-      "contextWindow": 128000,
-      "maxOutputTokens": 16384,
-      "capabilities": {
-        "tools": true,
-        "vision": true,
-        "jsonSchema": true,
-        "streaming": true,
-        "promptCaching": true
-      },
-      "pricing": {
-        "inputPerMTok": 0.15,
-        "outputPerMTok": 0.6,
-        "cachedInputPerMTok": 0.075
-      }
-    },
     "openai:text-embedding-3-small": {
-      "displayName": "text-embedding-3-small",
+      "displayName": "OpenAI text-embedding-3-small",
       "provider": "openai",
       "providerModelId": "text-embedding-3-small",
       "kind": "embedding",
@@ -259,14 +356,14 @@
       }
     },
     "openai:text-embedding-3-large": {
-      "displayName": "text-embedding-3-large",
+      "displayName": "OpenAI text-embedding-3-large",
       "provider": "openai",
       "providerModelId": "text-embedding-3-large",
       "kind": "embedding",
       "contextWindow": 8191,
       "dimensions": 3072,
       "retrieval": {
-        "defaultSimilarityThreshold": 0.28
+        "defaultSimilarityThreshold": 0.3
       },
       "capabilities": {
         "tools": false,
@@ -279,90 +376,15 @@
         "outputPerMTok": 0
       }
     },
-    "groq:llama-3.3-70b-versatile": {
-      "displayName": "Llama 3.3 70B (Groq)",
-      "provider": "groq",
-      "providerModelId": "llama-3.3-70b-versatile",
+    "deepseek:deepseek-flash": {
+      "displayName": "DeepSeek Flash",
+      "provider": "deepseek",
+      "providerModelId": "deepseek-flash",
       "kind": "chat",
-      "contextWindow": 131072,
-      "maxOutputTokens": 32768,
-      "capabilities": {
-        "tools": true,
-        "vision": false,
-        "jsonSchema": true,
-        "streaming": true
-      },
-      "pricing": {
-        "inputPerMTok": 0.59,
-        "outputPerMTok": 0.79
-      }
-    },
-    "groq:llama-3.1-8b-instant": {
-      "displayName": "Llama 3.1 8B (Groq)",
-      "provider": "groq",
-      "providerModelId": "llama-3.1-8b-instant",
-      "kind": "chat",
-      "contextWindow": 131072,
-      "maxOutputTokens": 131072,
-      "capabilities": {
-        "tools": true,
-        "vision": false,
-        "jsonSchema": true,
-        "streaming": true
-      },
-      "pricing": {
-        "inputPerMTok": 0.05,
-        "outputPerMTok": 0.08
-      }
-    },
-    "groq:gpt-oss-120b": {
-      "displayName": "GPT-OSS 120B (Groq)",
-      "provider": "groq",
-      "providerModelId": "openai/gpt-oss-120b",
-      "kind": "chat",
-      "contextWindow": 131072,
+      "contextWindow": 1000000,
       "maxOutputTokens": 65536,
       "capabilities": {
         "tools": true,
-        "vision": false,
-        "jsonSchema": true,
-        "streaming": true,
-        "reasoning": true
-      },
-      "pricing": {
-        "inputPerMTok": 0.15,
-        "outputPerMTok": 0.75
-      }
-    },
-    "deepseek:deepseek-chat": {
-      "displayName": "DeepSeek Chat",
-      "provider": "deepseek",
-      "providerModelId": "deepseek-chat",
-      "kind": "chat",
-      "contextWindow": 65536,
-      "maxOutputTokens": 8192,
-      "capabilities": {
-        "tools": true,
-        "vision": false,
-        "jsonSchema": true,
-        "streaming": true,
-        "promptCaching": true
-      },
-      "pricing": {
-        "inputPerMTok": 0.27,
-        "outputPerMTok": 1.1,
-        "cachedInputPerMTok": 0.07
-      }
-    },
-    "deepseek:deepseek-reasoner": {
-      "displayName": "DeepSeek Reasoner",
-      "provider": "deepseek",
-      "providerModelId": "deepseek-reasoner",
-      "kind": "chat",
-      "contextWindow": 65536,
-      "maxOutputTokens": 65536,
-      "capabilities": {
-        "tools": false,
         "vision": false,
         "jsonSchema": false,
         "streaming": true,
@@ -370,9 +392,30 @@
         "promptCaching": true
       },
       "pricing": {
-        "inputPerMTok": 0.55,
-        "outputPerMTok": 2.19,
-        "cachedInputPerMTok": 0.14
+        "inputPerMTok": 0.3,
+        "outputPerMTok": 1.2,
+        "cachedInputPerMTok": 0.006
+      }
+    },
+    "deepseek:deepseek-v4-pro": {
+      "displayName": "DeepSeek V4 Pro",
+      "provider": "deepseek",
+      "providerModelId": "deepseek-v4-pro",
+      "kind": "chat",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "capabilities": {
+        "tools": true,
+        "vision": false,
+        "jsonSchema": false,
+        "streaming": true,
+        "reasoning": true,
+        "promptCaching": true
+      },
+      "pricing": {
+        "inputPerMTok": 1.32,
+        "outputPerMTok": 3.96,
+        "cachedInputPerMTok": 0.044
       }
     },
     "local:hash-embedding-384": {
@@ -397,5 +440,5 @@
       }
     }
   },
-  "_comment2": "Embedding entries carry retrieval.defaultSimilarityThreshold because a cosine score is only meaningful relative to the model that produced it: a relevant query/passage pair scores ~0.35 on text-embedding-3-small, ~0.7 on gemini-embedding-001 and ~0.05 on the local hashed embedder. One global threshold is therefore wrong for at least two of the three."
+  "_comment2": "Embedding entries carry retrieval.defaultSimilarityThreshold because a cosine score is only meaningful relative to the model that produced it. Measured on the same query/passage pair: ~0.73 on gemini-embedding-2, ~0.40 on the local hashed embedder. A single global threshold would therefore be wrong for at least one of them -- at 0.55 the local embedder returns nothing, at 0.15 Gemini returns everything. Thresholds are re-measured when a model is added; see docs/PROVIDER_NOTES.md."
 }
