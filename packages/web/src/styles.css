@@ -386,6 +386,22 @@ kbd {
 .canvas { grid-column: 2; }
 .inspector { grid-column: 3; }
 
+/*
+ * min-height: 0 is load-bearing -- do not remove.
+ *
+ * A grid item's min-height defaults to `auto`, which resolves to its CONTENT
+ * height. Without this, a long thread makes .canvas taller than its grid row
+ * instead of clipping, so the inner .canvas-scroll never has a bounded parent to
+ * scroll inside: the overflow is simply hidden by .app and the conversation
+ * becomes unreachable, taking the composer off-screen with it.
+ */
+.context,
+.canvas,
+.inspector {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .context {
   min-width: 0;
   overflow: hidden;
