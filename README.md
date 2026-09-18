@@ -9,7 +9,7 @@ boundary that the database itself enforces.
 packages/server   Node + TypeScript + Express 5 + SQLite (better-sqlite3)
 packages/web      React 19 + Vite — light theme, self-hosted Inter/JetBrains Mono
 config/           models, pricing, providers, retry, fallback, RAG defaults
-docs/             DESIGN.md · PROVIDER_NOTES.md · AI_USAGE.md
+docs/             ARCHITECTURE.md · DESIGN.md · PROVIDER_NOTES.md · AI_USAGE.md
 ```
 
 The interface is built around the thing this product is for: a header showing
@@ -179,8 +179,10 @@ goes through a guarded layer that refuses any SQL touching tenant data without a
 tenant predicate, over a schema whose composite foreign keys make a cross-tenant
 reference impossible at the database level.
 
-Full diagrams, the request lifecycle, the decision log and the security posture
-are in [`docs/DESIGN.md`](docs/DESIGN.md).
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the map — system context, the module
+layering, the request lifecycle, the tenant boundary, the RAG pipeline and a proposed
+AWS topology, as diagrams. [`docs/DESIGN.md`](docs/DESIGN.md) is the decision record:
+what was chosen, what was rejected, and why.
 
 ---
 
